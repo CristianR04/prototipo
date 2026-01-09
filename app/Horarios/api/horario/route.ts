@@ -6,9 +6,8 @@ interface HorarioRequest {
     employeeid: string;
     fecha: string;
     hora_entrada: string;
+    tipo_jornada?: "normal" | "entrada_tardia" | "salida_temprana";
 }
-
-
 
 // GET: Obtener horarios existentes (se mantiene igual)
 export async function GET(request: NextRequest) {
@@ -25,7 +24,12 @@ export async function GET(request: NextRequest) {
                 h.employeeid,
                 h.fecha::date::text as fecha,
                 h.hora_entrada,
+                h.hora_salida,
+                h.break_1,
+                h.colacion,
+                h.break_2,
                 h.campana_id,
+                h.tipo_jornada,
                 u.nombre,
                 c.campana
             FROM horarios h
@@ -65,7 +69,88 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// POST: Guardar/Actualizar - VERSIÓN MEJORADA CON CÁLCULO AUTOMÁTICO DE HORARIOS
+// Función CORREGIDA para calcular horas con tipos de jornada - REVISIÓN FINAL
+const calcularHorasConJornada = (
+    horaEntrada: string | null,
+    tipoJornada: string = "normal"
+): {
+    break1: string | null;
+    colacion: string | null;
+    break2: string | null;
+    hora_salida: string | null;
+} => {
+    if (!horaEntrada || horaEntrada === "Libre") {
+        return {
+            break1: null,
+            colacion: null,
+            break2: null,
+            hora_salida: null
+        };
+    }
+
+    try {
+        // Convertir hora de entrada a Date object
+        const [horas, minutos] = horaEntrada.split(':').map(Number);
+        const entradaDate = new Date();
+        entradaDate.setHours(horas, minutos, 0, 0);
+        
+        // Función auxiliar para sumar horas
+        const sumarHoras = (fecha: Date, horasASumar: number): string => {
+            const nuevaFecha = new Date(fecha);
+            nuevaFecha.setHours(nuevaFecha.getHours() + horasASumar);
+            
+            // Formatear a HH:mm
+            const horasStr = nuevaFecha.getHours().toString().padStart(2, '0');
+            const minutosStr = nuevaFecha.getMinutes().toString().padStart(2, '0');
+            return `${horasStr}:${minutosStr}`;
+        };
+        
+        // Función para calcular breaks proporcionales
+        const calcularBreaksParaDuracion = (entrada: Date, duracion: number) => {
+            // Los breaks se mantienen proporcionales a la duración
+            const proporcion = duracion / 10; // 10 es la duración normal
+            
+            return {
+                break1: sumarHoras(entrada, 2 * proporcion),          // Break 1 proporcional
+                colacion: sumarHoras(entrada, 5 * proporcion),        // Colación proporcional
+                break2: sumarHoras(entrada, 8 * proporcion),          // Break 2 proporcional
+                hora_salida: sumarHoras(entrada, duracion)           // Duración total
+            };
+        };
+
+        // Calcular según tipo de jornada - LOGICA CORREGIDA
+        switch (tipoJornada) {
+            case "entrada_tardia":
+                // Entrada tardía: Suma 1 hora a la entrada configurada
+                // Jornada de 9 horas desde la nueva hora de entrada
+                const entradaTardiaDate = new Date(entradaDate);
+                entradaTardiaDate.setHours(entradaTardiaDate.getHours() + 1);
+                
+                // Jornada de 9 horas desde la entrada tardía
+                return calcularBreaksParaDuracion(entradaTardiaDate, 9);
+                
+            case "salida_temprana":
+                // Salida temprana: Jornada de 9 horas desde la hora de entrada original
+                return calcularBreaksParaDuracion(entradaDate, 9);
+                
+            case "normal":
+            default:
+                // Jornada normal: 10 horas desde la hora de entrada original
+                return calcularBreaksParaDuracion(entradaDate, 10);
+        }
+        
+    } catch (error) {
+        console.error('Error al calcular horas:', error);
+        return {
+            break1: null,
+            colacion: null,
+            break2: null,
+            hora_salida: null
+        };
+    }
+};
+
+// POST: Guardar/Actualizar - VERSIÓN CON TIPOS DE JORNADA CORREGIDA
 export async function POST(request: NextRequest) {
     const client = await pool.connect();
     
@@ -89,7 +174,8 @@ export async function POST(request: NextRequest) {
         // 2. OBTENER HORARIOS EXISTENTES en el rango de fechas
         const existingQuery = `
             SELECT id, employeeid, fecha::date as fecha, 
-                   hora_entrada, hora_salida, break_1, colacion, break_2, campana_id
+                   hora_entrada, hora_salida, break_1, colacion, break_2, 
+                   campana_id, tipo_jornada
             FROM horarios 
             WHERE fecha::date >= $1::date 
             AND fecha::date <= $2::date
@@ -106,53 +192,6 @@ export async function POST(request: NextRequest) {
             const key = `${h.employeeid}_${h.fecha.toISOString().split('T')[0]}`;
             existingMap.set(key, h);
         });
-
-        // Función para calcular horas automáticamente basadas en la hora de entrada
-        const calcularHorasAutomaticas = (horaEntrada: string | null) => {
-            if (!horaEntrada || horaEntrada === "Libre") {
-                return {
-                    break1: null,
-                    colacion: null,
-                    break2: null,
-                    hora_salida: null
-                };
-            }
-
-            try {
-                // Convertir hora de entrada a Date object
-                const [horas, minutos] = horaEntrada.split(':').map(Number);
-                const entradaDate = new Date();
-                entradaDate.setHours(horas, minutos, 0, 0);
-                
-                // Función auxiliar para sumar horas
-                const sumarHoras = (fecha: Date, horasASumar: number): string => {
-                    const nuevaFecha = new Date(fecha);
-                    nuevaFecha.setHours(nuevaFecha.getHours() + horasASumar);
-                    
-                    // Formatear a HH:mm
-                    const horasStr = nuevaFecha.getHours().toString().padStart(2, '0');
-                    const minutosStr = nuevaFecha.getMinutes().toString().padStart(2, '0');
-                    return `${horasStr}:${minutosStr}`;
-                };
-                
-                // Calcular horarios según las reglas
-                return {
-                    break1: sumarHoras(entradaDate, 2),      // 2 horas después de entrada
-                    colacion: sumarHoras(entradaDate, 5),    // 5 horas después de entrada
-                    break2: sumarHoras(entradaDate, 8),      // 8 horas después de entrada
-                    hora_salida: sumarHoras(entradaDate, 10) // 10 horas después de entrada
-                };
-                
-            } catch (error) {
-                console.error('Error al calcular horas automáticas:', error);
-                return {
-                    break1: null,
-                    colacion: null,
-                    break2: null,
-                    hora_salida: null
-                };
-            }
-        };
 
         // 3. PROCESAR CADA HORARIO DEL PAYLOAD
         let insertados = 0;
@@ -176,33 +215,40 @@ export async function POST(request: NextRequest) {
                 
                 const campana_id = usuarioRes.rows[0]?.campana_id || 1;
                 
+                // Obtener tipo de jornada (por defecto "normal")
+                const tipoJornada = h.tipo_jornada || "normal";
+                
                 // Convertir "Libre" a NULL
                 const horaEntrada = h.hora_entrada === "Libre" || h.hora_entrada === "" ? null : h.hora_entrada;
                 
-                // Calcular horas automáticas basadas en la hora de entrada
-                const horasCalculadas = calcularHorasAutomaticas(horaEntrada);
+                // Calcular horas automáticas basadas en la hora de entrada y tipo de jornada
+                const horasCalculadas = calcularHorasConJornada(horaEntrada, tipoJornada);
                 
                 // Clave única para identificar el registro
                 const key = `${h.employeeid}_${h.fecha}`;
                 const existing = existingMap.get(key);
                 
+                // Texto para logs según tipo de jornada
+                const tipoJornadaTexto = tipoJornada === "normal" ? "Normal (10h)" :
+                                       tipoJornada === "entrada_tardia" ? "Entrada tardía (9h desde entrada+1h)" :
+                                       tipoJornada === "salida_temprana" ? "Salida temprana (9h desde entrada)" : "Normal";
+                
+                // VERIFICACIÓN IMPORTANTE: Si hay hora de entrada en el payload
+                const tieneHoraEntradaEnPayload = horaEntrada !== null;
+                
                 if (existing) {
                     // REGISTRO EXISTENTE: Verificar si debe actualizarse
                     const debeActualizar = (
-                        // Si el nuevo valor es diferente del existente
-                        horaEntrada !== existing.hora_entrada ||
-                        // O si hay una campana_id diferente
-                        campana_id !== existing.campana_id
+                        // Si hay una nueva hora de entrada en el payload
+                        tieneHoraEntradaEnPayload ||
+                        // O si el tipo de jornada es diferente
+                        tipoJornada !== existing.tipo_jornada
                     );
                     
                     if (debeActualizar) {
-                        // Solo actualizar si el registro actual tiene hora_entrada nula
-                        if (existing.hora_entrada !== null) {
-                            // Mantener el valor existente (no se actualiza)
-                            conservados++;
-                            console.log(`🔒 Conservado: ${key} (tenía valor no nulo: ${existing.hora_entrada})`);
-                        } else {
-                            // Actualizar registro (valor existente es nulo)
+                        // CASO 1: Hay nueva hora de entrada en el payload
+                        if (tieneHoraEntradaEnPayload) {
+                            // Actualizar con nueva hora de entrada y recalcular todo
                             const updateQuery = `
                                 UPDATE horarios 
                                 SET hora_entrada = $1, 
@@ -210,9 +256,10 @@ export async function POST(request: NextRequest) {
                                     colacion = $3,
                                     break_2 = $4,
                                     hora_salida = $5,
-                                    campana_id = $6, 
+                                    campana_id = $6,
+                                    tipo_jornada = $7,
                                     updated_at = NOW()
-                                WHERE id = $7
+                                WHERE id = $8
                             `;
                             
                             await client.query(updateQuery, [
@@ -222,12 +269,60 @@ export async function POST(request: NextRequest) {
                                 horasCalculadas.break2,
                                 horasCalculadas.hora_salida,
                                 campana_id,
+                                tipoJornada,
                                 existing.id
                             ]);
                             
                             actualizados++;
-                            console.log(`✏️ Actualizado: ${key}`);
-                            console.log(`   Entrada: ${horaEntrada}, Break1: ${horasCalculadas.break1}, Colación: ${horasCalculadas.colacion}, Break2: ${horasCalculadas.break2}, Salida: ${horasCalculadas.hora_salida}`);
+                            console.log(`✏️ Actualizado con nueva hora: ${key} -> ${tipoJornadaTexto}`);
+                            console.log(`   Entrada: ${horaEntrada}, Salida: ${horasCalculadas.hora_salida}`);
+                        }
+                        // CASO 2: Solo cambio de tipo de jornada (sin nueva hora de entrada)
+                        else if (tipoJornada !== existing.tipo_jornada) {
+                            // Si el registro ya tiene hora de entrada, recalcular con el nuevo tipo
+                            if (existing.hora_entrada) {
+                                const horasRecalculadas = calcularHorasConJornada(existing.hora_entrada, tipoJornada);
+                                
+                                const updateQuery = `
+                                    UPDATE horarios 
+                                    SET tipo_jornada = $1,
+                                        break_1 = $2,
+                                        colacion = $3,
+                                        break_2 = $4,
+                                        hora_salida = $5,
+                                        updated_at = NOW()
+                                    WHERE id = $6
+                                `;
+                                
+                                await client.query(updateQuery, [
+                                    tipoJornada,
+                                    horasRecalculadas.break1,
+                                    horasRecalculadas.colacion,
+                                    horasRecalculadas.break2,
+                                    horasRecalculadas.hora_salida,
+                                    existing.id
+                                ]);
+                                
+                                actualizados++;
+                                console.log(`✏️ Actualizado solo tipo de jornada: ${key} -> ${tipoJornadaTexto}`);
+                                console.log(`   Entrada: ${existing.hora_entrada} (mantenida), Salida: ${horasRecalculadas.hora_salida}`);
+                            } else {
+                                // Si no hay hora de entrada, solo actualizar tipo de jornada
+                                const updateQuery = `
+                                    UPDATE horarios 
+                                    SET tipo_jornada = $1,
+                                        updated_at = NOW()
+                                    WHERE id = $2
+                                `;
+                                
+                                await client.query(updateQuery, [
+                                    tipoJornada,
+                                    existing.id
+                                ]);
+                                
+                                actualizados++;
+                                console.log(`✏️ Actualizado solo tipo de jornada (sin hora): ${key} -> ${tipoJornadaTexto}`);
+                            }
                         }
                     } else {
                         conservados++;
@@ -244,9 +339,10 @@ export async function POST(request: NextRequest) {
                             break_2,
                             hora_salida,
                             campana_id, 
+                            tipo_jornada,
                             created_at
                         )
-                        VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, NOW())
+                        VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9, NOW())
                     `;
                     
                     await client.query(insertQuery, [
@@ -257,12 +353,13 @@ export async function POST(request: NextRequest) {
                         horasCalculadas.colacion,
                         horasCalculadas.break2,
                         horasCalculadas.hora_salida,
-                        campana_id
+                        campana_id,
+                        tipoJornada
                     ]);
                     
                     insertados++;
-                    console.log(`➕ Insertado: ${key}`);
-                    console.log(`   Entrada: ${horaEntrada}, Break1: ${horasCalculadas.break1}, Colación: ${horasCalculadas.colacion}, Break2: ${horasCalculadas.break2}, Salida: ${horasCalculadas.hora_salida}`);
+                    console.log(`➕ Insertado: ${key} -> ${tipoJornadaTexto}`);
+                    console.log(`   Entrada: ${horaEntrada}, Salida: ${horasCalculadas.hora_salida}`);
                 }
                 
             } catch (error: any) {

@@ -1,12 +1,11 @@
 // app/api/horarios-completos/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db'; // Ajusta la ruta según tu configuración
+import pool from '@/lib/db';
 
 export async function GET(request: NextRequest) {
     const client = await pool.connect();
 
     try {
-        // Obtener todos los usuarios con sus horarios de los últimos 7 días
         const query = `
       SELECT 
         u.employeeid,
@@ -30,7 +29,6 @@ export async function GET(request: NextRequest) {
 
         const result = await client.query(query);
 
-        // Organizar datos por usuario
         const usuariosMap = new Map();
 
         result.rows.forEach((row: any) => {
@@ -45,11 +43,10 @@ export async function GET(request: NextRequest) {
                 });
             }
 
-            // Solo agregar horario si existe
             if (row.fecha) {
                 const usuario = usuariosMap.get(usuarioId);
                 usuario.horarios.push({
-                    fecha: row.fecha.toISOString().split('T')[0], // Formato YYYY-MM-DD
+                    fecha: row.fecha.toISOString().split('T')[0], 
                     hora_entrada: row.hora_entrada,
                     hora_salida: row.hora_salida,
                     break_1: row.break_1,
@@ -60,7 +57,6 @@ export async function GET(request: NextRequest) {
             }
         });
 
-        // Convertir mapa a array
         const usuarios = Array.from(usuariosMap.values());
 
         return NextResponse.json({

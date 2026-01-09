@@ -1,12 +1,11 @@
 // app/Horarios/api/usuarios/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import  pool  from '@/lib/db'; // Ajusta según tu configuración de base de datos
+import  pool  from '@/lib/db'; 
 
 export async function GET(request: NextRequest) {
     try {
-        // Ejemplo con PostgreSQL (ajusta según tu DB)
-        const usuarios = await pool.query(
-            'SELECT employeeid, nombre FROM usuarios ORDER BY nombre' // Ajusta los nombres de campos
+       const usuarios = await pool.query(
+            'SELECT employeeid, nombre FROM usuarios ORDER BY nombre' 
         );
 
         return NextResponse.json({
