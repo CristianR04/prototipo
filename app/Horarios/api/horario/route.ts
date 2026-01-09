@@ -2,11 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
+// Definir tipos de jornada
+type TipoJornada = "normal" | "entrada_tardia" | "salida_temprana";
+
 interface HorarioRequest {
     employeeid: string;
     fecha: string;
     hora_entrada: string;
-    tipo_jornada?: "normal" | "entrada_tardia" | "salida_temprana";
+    tipo_jornada?: TipoJornada;
 }
 
 // GET: Obtener horarios existentes
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
 // Función para calcular horas con tipos de jornada
 const calcularHorasConJornada = (
     horaEntrada: string | null,
-    tipoJornada: string = "normal"
+    tipoJornada: TipoJornada = "normal"
 ): {
     break1: string | null;
     colacion: string | null;
@@ -202,7 +205,7 @@ export async function POST(request: NextRequest) {
                 }
 
                 const campana_id = usuarioRes.rows[0]?.campana_id || 1;
-                const tipoJornada = h.tipo_jornada || "normal";
+                const tipoJornada: TipoJornada = h.tipo_jornada || "normal";
                 const horaEntrada = h.hora_entrada === "Libre" || h.hora_entrada === "" ? null : h.hora_entrada;
 
                 // Calcular horas automáticas
@@ -409,15 +412,24 @@ export async function DELETE(request: NextRequest) {
 }
 
 // NUEVO: Endpoint para generación automática de horarios (2 meses)
+// NUEVO: Endpoint para generación automática de horarios (2 meses)
 export async function PUT(request: NextRequest) {
     const client = await pool.connect();
 
     try {
-        const { meses = 2 } = await request.json();
+        // Leer el cuerpo de la solicitud
+        let requestBody: any;
+        try {
+            requestBody = await request.json();
+        } catch (error) {
+            requestBody = { meses: 2 };
+        }
 
-        console.log(`🚀 Iniciando generación automática para ${meses} meses...`);
+        const meses = requestBody.meses || 2;
+        
+        console.log(`🚀 Iniciando generación inteligente para ${meses} meses...`);
 
-        // 1. Obtener empleados
+        // 1. Obtener empleados (estructura ORIGINAL sin cambios)
         const queryUsuarios = `
             SELECT 
                 u.employeeid,
@@ -433,15 +445,22 @@ export async function PUT(request: NextRequest) {
 
         if (usuariosResult.rows.length === 0) {
             return NextResponse.json(
-                { success: false, message: 'No hay empleados activos para generar horarios' },
+                { success: false, message: 'No hay empleados para generar horarios' },
                 { status: 400 }
             );
         }
 
+        console.log(`👥 Empleados encontrados: ${usuariosResult.rows.length}`);
+
         // 2. Determinar rango de fechas
         const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        
         const fechaFin = new Date();
         fechaFin.setMonth(fechaFin.getMonth() + meses);
+        fechaFin.setHours(23, 59, 59, 999);
+
+        console.log(`📅 Rango: ${hoy.toISOString().split('T')[0]} - ${fechaFin.toISOString().split('T')[0]}`);
 
         // 3. Eliminar horarios futuros existentes
         await client.query('BEGIN');
@@ -450,63 +469,134 @@ export async function PUT(request: NextRequest) {
             DELETE FROM horarios 
             WHERE fecha::date >= $1::date 
             AND fecha::date <= $2::date
+            RETURNING id
         `;
 
-        await client.query(deleteQuery, [
+        const deleteResult = await client.query(deleteQuery, [
             hoy.toISOString().split('T')[0],
             fechaFin.toISOString().split('T')[0]
         ]);
 
-        // 4. Generar horarios simples (ejemplo básico)
-        // En una implementación real, aquí iría la lógica compleja de asignación
-        const horariosGenerados = [];
+        console.log(`🗑️ Eliminados ${deleteResult.rowCount} registros existentes`);
+
+        // 4. Configuración simple
+        const config = {
+            excluirFinesSemana: true,
+            horariosBase: ['07:00', '07:30', '08:00', '08:30', '09:00'],
+            aleatorizarHorarios: true,
+            patronSemanal: true
+        };
+
+        // 5. Función para determinar si es día laborable
+        const esDiaLaborable = (fecha: Date): boolean => {
+            const diaSemana = fecha.getDay();
+            if (config.excluirFinesSemana && (diaSemana === 0 || diaSemana === 6)) {
+                return false;
+            }
+            return true;
+        };
+
+        // 6. Función para obtener horario aleatorio
+        const obtenerHorarioParaDia = (
+            empleadoId: string, 
+            fecha: Date, 
+            semanaNumero: number
+        ): { horaEntrada: string; tipoJornada: TipoJornada } => {
+            
+            let horaSeleccionada: string;
+            
+            if (config.aleatorizarHorarios) {
+                if (config.patronSemanal) {
+                    const seed = parseInt(empleadoId.replace(/\D/g, '')) || 0;
+                    const indiceSemana = semanaNumero % config.horariosBase.length;
+                    const indiceEmpleado = seed % config.horariosBase.length;
+                    const indice = (indiceSemana + indiceEmpleado) % config.horariosBase.length;
+                    horaSeleccionada = config.horariosBase[indice];
+                } else {
+                    const seed = parseInt(empleadoId.replace(/\D/g, '')) + fecha.getDate();
+                    const indice = seed % config.horariosBase.length;
+                    horaSeleccionada = config.horariosBase[indice];
+                }
+            } else {
+                horaSeleccionada = config.horariosBase[0];
+            }
+            
+            const tiposJornada: TipoJornada[] = ["normal", "entrada_tardia", "salida_temprana"];
+            const tipoIndex = semanaNumero % tiposJornada.length;
+            
+            return {
+                horaEntrada: horaSeleccionada,
+                tipoJornada: tiposJornada[tipoIndex]
+            };
+        };
+
+        // 7. Generar horarios
+        const horariosGenerados: Array<{
+            employeeid: string;
+            fecha: string;
+            hora_entrada: string;
+            tipo_jornada: TipoJornada;
+            campana_id: number;
+        }> = [];
+        
+        const stats = {
+            diasGenerados: 0,
+            finesSemanaExcluidos: 0,
+            errores: 0
+        };
 
         for (const usuario of usuariosResult.rows) {
             const fechaActual = new Date(hoy);
+            let semanaActual = 1;
 
             while (fechaActual <= fechaFin) {
-                const fechaStr = fechaActual.toISOString().split('T')[0];
+                try {
+                    const diaSemana = fechaActual.getDay();
+                    if (diaSemana === 1) {
+                        semanaActual++;
+                    }
 
-                // Si el usuario está en licencia
-                if (usuario.estado === 'Licencia') {
-                    horariosGenerados.push({
-                        employeeid: usuario.employeeid,
-                        fecha: fechaStr,
-                        hora_entrada: '08:00', // O la lógica que prefieras
-                        tipo_jornada: 'normal'
-                    });
-                } else {
-                    // Asignar horario básico (ejemplo simple)
-                    // En producción, aquí iría la lógica de asignación inteligente
-                    const horaEntrada = '08:00'; // Ejemplo básico
-                    const tipoJornada = 'normal';
+                    if (!esDiaLaborable(fechaActual)) {
+                        stats.finesSemanaExcluidos++;
+                        fechaActual.setDate(fechaActual.getDate() + 1);
+                        continue;
+                    }
+
+                    const fechaStr = fechaActual.toISOString().split('T')[0];
+                    
+                    const { horaEntrada, tipoJornada } = obtenerHorarioParaDia(
+                        usuario.employeeid,
+                        fechaActual,
+                        semanaActual
+                    );
 
                     horariosGenerados.push({
                         employeeid: usuario.employeeid,
                         fecha: fechaStr,
                         hora_entrada: horaEntrada,
-                        tipo_jornada: tipoJornada
+                        tipo_jornada: tipoJornada,
+                        campana_id: usuario.campana_id || 1
                     });
+
+                    stats.diasGenerados++;
+
+                } catch (error) {
+                    console.error(`Error procesando ${usuario.employeeid} - ${fechaActual}:`, error);
+                    stats.errores++;
                 }
 
-                // Siguiente día
                 fechaActual.setDate(fechaActual.getDate() + 1);
             }
         }
 
-        // 5. Guardar horarios generados
+        console.log(`📊 Estadísticas: ${JSON.stringify(stats, null, 2)}`);
+
+        // 8. Guardar horarios generados
         let insertados = 0;
 
         for (const horario of horariosGenerados) {
             try {
-                const usuarioRes = await client.query(
-                    "SELECT campana_id FROM usuarios WHERE employeeid = $1",
-                    [horario.employeeid]
-                );
-
-                const campana_id = usuarioRes.rows[0]?.campana_id || 1;
-                const horaEntrada = horario.hora_entrada === "Libre" ? null : horario.hora_entrada;
-                const horasCalculadas = calcularHorasConJornada(horaEntrada, horario.tipo_jornada);
+                const horasCalculadas = calcularHorasConJornada(horario.hora_entrada, horario.tipo_jornada);
 
                 const insertQuery = `
                     INSERT INTO horarios (
@@ -527,19 +617,20 @@ export async function PUT(request: NextRequest) {
                 await client.query(insertQuery, [
                     horario.employeeid,
                     horario.fecha,
-                    horaEntrada,
+                    horario.hora_entrada,
                     horasCalculadas.break1,
                     horasCalculadas.colacion,
                     horasCalculadas.break2,
                     horasCalculadas.hora_salida,
-                    campana_id,
+                    horario.campana_id || 1,
                     horario.tipo_jornada
                 ]);
 
                 insertados++;
 
-            } catch (error) {
-                console.error(`Error insertando horario:`, error);
+            } catch (error: any) {
+                console.error(`Error insertando horario ${horario.employeeid} - ${horario.fecha}:`, error.message);
+                stats.errores++;
             }
         }
 
@@ -552,6 +643,8 @@ export async function PUT(request: NextRequest) {
                 totalEmpleados: usuariosResult.rows.length,
                 horariosGenerados: horariosGenerados.length,
                 insertados: insertados,
+                finesSemanaExcluidos: stats.finesSemanaExcluidos,
+                errores: stats.errores,
                 rango: {
                     inicio: hoy.toISOString().split('T')[0],
                     fin: fechaFin.toISOString().split('T')[0]
