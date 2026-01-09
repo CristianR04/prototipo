@@ -9,10 +9,10 @@ interface HorarioRequest {
     tipo_jornada?: "normal" | "entrada_tardia" | "salida_temprana";
 }
 
-// GET: Obtener horarios existentes (se mantiene igual)
+// GET: Obtener horarios existentes
 export async function GET(request: NextRequest) {
     const client = await pool.connect();
-    
+
     try {
         const { searchParams } = new URL(request.url);
         const fecha_inicio = searchParams.get('fecha_inicio');
@@ -38,12 +38,12 @@ export async function GET(request: NextRequest) {
         `;
 
         const params: any[] = [];
-        
+
         if (fecha_inicio && fecha_fin) {
             query += ` WHERE h.fecha::date >= $1::date AND h.fecha::date <= $2::date`;
             params.push(fecha_inicio, fecha_fin);
         }
-        
+
         query += ` ORDER BY h.employeeid, h.fecha`;
 
         const result = await client.query(query, params);
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// Función CORREGIDA para calcular horas con tipos de jornada - REVISIÓN FINAL
+// Función para calcular horas con tipos de jornada
 const calcularHorasConJornada = (
     horaEntrada: string | null,
     tipoJornada: string = "normal"
@@ -89,56 +89,44 @@ const calcularHorasConJornada = (
     }
 
     try {
-        // Convertir hora de entrada a Date object
         const [horas, minutos] = horaEntrada.split(':').map(Number);
         const entradaDate = new Date();
         entradaDate.setHours(horas, minutos, 0, 0);
-        
-        // Función auxiliar para sumar horas
+
         const sumarHoras = (fecha: Date, horasASumar: number): string => {
             const nuevaFecha = new Date(fecha);
             nuevaFecha.setHours(nuevaFecha.getHours() + horasASumar);
-            
-            // Formatear a HH:mm
+
             const horasStr = nuevaFecha.getHours().toString().padStart(2, '0');
             const minutosStr = nuevaFecha.getMinutes().toString().padStart(2, '0');
             return `${horasStr}:${minutosStr}`;
         };
-        
-        // Función para calcular breaks proporcionales
+
         const calcularBreaksParaDuracion = (entrada: Date, duracion: number) => {
-            // Los breaks se mantienen proporcionales a la duración
-            const proporcion = duracion / 10; // 10 es la duración normal
-            
+            const proporcion = duracion / 10;
+
             return {
-                break1: sumarHoras(entrada, 2 * proporcion),          // Break 1 proporcional
-                colacion: sumarHoras(entrada, 5 * proporcion),        // Colación proporcional
-                break2: sumarHoras(entrada, 8 * proporcion),          // Break 2 proporcional
-                hora_salida: sumarHoras(entrada, duracion)           // Duración total
+                break1: sumarHoras(entrada, 2 * proporcion),
+                colacion: sumarHoras(entrada, 5 * proporcion),
+                break2: sumarHoras(entrada, 8 * proporcion),
+                hora_salida: sumarHoras(entrada, duracion)
             };
         };
 
-        // Calcular según tipo de jornada - LOGICA CORREGIDA
         switch (tipoJornada) {
             case "entrada_tardia":
-                // Entrada tardía: Suma 1 hora a la entrada configurada
-                // Jornada de 9 horas desde la nueva hora de entrada
                 const entradaTardiaDate = new Date(entradaDate);
                 entradaTardiaDate.setHours(entradaTardiaDate.getHours() + 1);
-                
-                // Jornada de 9 horas desde la entrada tardía
                 return calcularBreaksParaDuracion(entradaTardiaDate, 9);
-                
+
             case "salida_temprana":
-                // Salida temprana: Jornada de 9 horas desde la hora de entrada original
                 return calcularBreaksParaDuracion(entradaDate, 9);
-                
+
             case "normal":
             default:
-                // Jornada normal: 10 horas desde la hora de entrada original
                 return calcularBreaksParaDuracion(entradaDate, 10);
         }
-        
+
     } catch (error) {
         console.error('Error al calcular horas:', error);
         return {
@@ -150,13 +138,13 @@ const calcularHorasConJornada = (
     }
 };
 
-// POST: Guardar/Actualizar - VERSIÓN CON TIPOS DE JORNADA CORREGIDA
+// POST: Guardar/Actualizar horarios
 export async function POST(request: NextRequest) {
     const client = await pool.connect();
-    
+
     try {
         const horarios: HorarioRequest[] = await request.json();
-        
+
         if (!horarios || horarios.length === 0) {
             return NextResponse.json(
                 { success: false, message: 'No hay datos para guardar' },
@@ -166,12 +154,12 @@ export async function POST(request: NextRequest) {
 
         await client.query('BEGIN');
 
-        // 1. OBTENER RANGO DE FECHAS del payload
+        // 1. Obtener rango de fechas
         const fechas = horarios.map(h => h.fecha);
         const fecha_inicio = fechas.sort()[0];
         const fecha_fin = fechas.sort()[fechas.length - 1];
-        
-        // 2. OBTENER HORARIOS EXISTENTES en el rango de fechas
+
+        // 2. Obtener horarios existentes
         const existingQuery = `
             SELECT id, employeeid, fecha::date as fecha, 
                    hora_entrada, hora_salida, break_1, colacion, break_2, 
@@ -180,20 +168,20 @@ export async function POST(request: NextRequest) {
             WHERE fecha::date >= $1::date 
             AND fecha::date <= $2::date
         `;
-        
+
         const existingResult = await client.query(existingQuery, [fecha_inicio, fecha_fin]);
         const existingHorarios = existingResult.rows;
-        
+
         console.log(`🔍 Encontrados ${existingHorarios.length} registros existentes en el rango`);
 
-        // Crear mapa para acceso rápido a registros existentes
+        // Crear mapa para acceso rápido
         const existingMap = new Map();
         existingHorarios.forEach(h => {
             const key = `${h.employeeid}_${h.fecha.toISOString().split('T')[0]}`;
             existingMap.set(key, h);
         });
 
-        // 3. PROCESAR CADA HORARIO DEL PAYLOAD
+        // 3. Procesar cada horario
         let insertados = 0;
         let actualizados = 0;
         let conservados = 0;
@@ -206,49 +194,34 @@ export async function POST(request: NextRequest) {
                     "SELECT campana_id FROM usuarios WHERE employeeid = $1",
                     [h.employeeid]
                 );
-                
+
                 if (usuarioRes.rows.length === 0) {
                     console.warn(`⚠️ Usuario no encontrado: ${h.employeeid}`);
                     errores++;
                     continue;
                 }
-                
+
                 const campana_id = usuarioRes.rows[0]?.campana_id || 1;
-                
-                // Obtener tipo de jornada (por defecto "normal")
                 const tipoJornada = h.tipo_jornada || "normal";
-                
-                // Convertir "Libre" a NULL
                 const horaEntrada = h.hora_entrada === "Libre" || h.hora_entrada === "" ? null : h.hora_entrada;
-                
-                // Calcular horas automáticas basadas en la hora de entrada y tipo de jornada
+
+                // Calcular horas automáticas
                 const horasCalculadas = calcularHorasConJornada(horaEntrada, tipoJornada);
-                
-                // Clave única para identificar el registro
+
+                // Clave única
                 const key = `${h.employeeid}_${h.fecha}`;
                 const existing = existingMap.get(key);
-                
-                // Texto para logs según tipo de jornada
-                const tipoJornadaTexto = tipoJornada === "normal" ? "Normal (10h)" :
-                                       tipoJornada === "entrada_tardia" ? "Entrada tardía (9h desde entrada+1h)" :
-                                       tipoJornada === "salida_temprana" ? "Salida temprana (9h desde entrada)" : "Normal";
-                
-                // VERIFICACIÓN IMPORTANTE: Si hay hora de entrada en el payload
-                const tieneHoraEntradaEnPayload = horaEntrada !== null;
-                
+
                 if (existing) {
-                    // REGISTRO EXISTENTE: Verificar si debe actualizarse
+                    // Verificar si debe actualizarse
                     const debeActualizar = (
-                        // Si hay una nueva hora de entrada en el payload
-                        tieneHoraEntradaEnPayload ||
-                        // O si el tipo de jornada es diferente
+                        horaEntrada !== null ||
                         tipoJornada !== existing.tipo_jornada
                     );
-                    
+
                     if (debeActualizar) {
-                        // CASO 1: Hay nueva hora de entrada en el payload
-                        if (tieneHoraEntradaEnPayload) {
-                            // Actualizar con nueva hora de entrada y recalcular todo
+                        // Actualizar con nueva hora de entrada
+                        if (horaEntrada !== null) {
                             const updateQuery = `
                                 UPDATE horarios 
                                 SET hora_entrada = $1, 
@@ -261,7 +234,7 @@ export async function POST(request: NextRequest) {
                                     updated_at = NOW()
                                 WHERE id = $8
                             `;
-                            
+
                             await client.query(updateQuery, [
                                 horaEntrada,
                                 horasCalculadas.break1,
@@ -272,17 +245,13 @@ export async function POST(request: NextRequest) {
                                 tipoJornada,
                                 existing.id
                             ]);
-                            
+
                             actualizados++;
-                            console.log(`✏️ Actualizado con nueva hora: ${key} -> ${tipoJornadaTexto}`);
-                            console.log(`   Entrada: ${horaEntrada}, Salida: ${horasCalculadas.hora_salida}`);
-                        }
-                        // CASO 2: Solo cambio de tipo de jornada (sin nueva hora de entrada)
-                        else if (tipoJornada !== existing.tipo_jornada) {
-                            // Si el registro ya tiene hora de entrada, recalcular con el nuevo tipo
+                        } else if (tipoJornada !== existing.tipo_jornada) {
+                            // Solo cambio de tipo de jornada
                             if (existing.hora_entrada) {
                                 const horasRecalculadas = calcularHorasConJornada(existing.hora_entrada, tipoJornada);
-                                
+
                                 const updateQuery = `
                                     UPDATE horarios 
                                     SET tipo_jornada = $1,
@@ -293,7 +262,7 @@ export async function POST(request: NextRequest) {
                                         updated_at = NOW()
                                     WHERE id = $6
                                 `;
-                                
+
                                 await client.query(updateQuery, [
                                     tipoJornada,
                                     horasRecalculadas.break1,
@@ -302,33 +271,30 @@ export async function POST(request: NextRequest) {
                                     horasRecalculadas.hora_salida,
                                     existing.id
                                 ]);
-                                
+
                                 actualizados++;
-                                console.log(`✏️ Actualizado solo tipo de jornada: ${key} -> ${tipoJornadaTexto}`);
-                                console.log(`   Entrada: ${existing.hora_entrada} (mantenida), Salida: ${horasRecalculadas.hora_salida}`);
                             } else {
-                                // Si no hay hora de entrada, solo actualizar tipo de jornada
+                                // Solo actualizar tipo de jornada
                                 const updateQuery = `
                                     UPDATE horarios 
                                     SET tipo_jornada = $1,
                                         updated_at = NOW()
                                     WHERE id = $2
                                 `;
-                                
+
                                 await client.query(updateQuery, [
                                     tipoJornada,
                                     existing.id
                                 ]);
-                                
+
                                 actualizados++;
-                                console.log(`✏️ Actualizado solo tipo de jornada (sin hora): ${key} -> ${tipoJornadaTexto}`);
                             }
                         }
                     } else {
                         conservados++;
                     }
                 } else {
-                    // NUEVO REGISTRO: Insertar con todas las horas calculadas
+                    // Nuevo registro
                     const insertQuery = `
                         INSERT INTO horarios (
                             employeeid, 
@@ -344,7 +310,7 @@ export async function POST(request: NextRequest) {
                         )
                         VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9, NOW())
                     `;
-                    
+
                     await client.query(insertQuery, [
                         h.employeeid,
                         h.fecha,
@@ -356,12 +322,10 @@ export async function POST(request: NextRequest) {
                         campana_id,
                         tipoJornada
                     ]);
-                    
+
                     insertados++;
-                    console.log(`➕ Insertado: ${key} -> ${tipoJornadaTexto}`);
-                    console.log(`   Entrada: ${horaEntrada}, Salida: ${horasCalculadas.hora_salida}`);
                 }
-                
+
             } catch (error: any) {
                 console.error(`❌ Error procesando ${h.employeeid} - ${h.fecha}:`, error.message);
                 errores++;
@@ -369,17 +333,9 @@ export async function POST(request: NextRequest) {
         }
 
         await client.query('COMMIT');
-        
-        console.log(`
-        📊 RESUMEN:
-        - Nuevos insertados: ${insertados}
-        - Actualizados: ${actualizados}
-        - Conservados: ${conservados}
-        - Errores: ${errores}
-        `);
-        
-        return NextResponse.json({ 
-            success: true, 
+
+        return NextResponse.json({
+            success: true,
             message: `Procesamiento completado`,
             detalle: {
                 insertados,
@@ -388,15 +344,15 @@ export async function POST(request: NextRequest) {
                 errores
             }
         });
-        
+
     } catch (error: any) {
         await client.query('ROLLBACK');
         console.error("❌ Error al guardar:", error);
-        
+
         return NextResponse.json(
-            { 
-                success: false, 
-                message: "Error al guardar: " + error.message 
+            {
+                success: false,
+                message: "Error al guardar: " + error.message
             },
             { status: 500 }
         );
@@ -405,10 +361,10 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// DELETE: Eliminar horarios por rango (se mantiene igual)
+// DELETE: Eliminar horarios por rango
 export async function DELETE(request: NextRequest) {
     const client = await pool.connect();
-    
+
     try {
         const { searchParams } = new URL(request.url);
         const fecha_inicio = searchParams.get('fecha_inicio');
@@ -447,6 +403,174 @@ export async function DELETE(request: NextRequest) {
             message: 'Error al eliminar',
             error: error.message
         }, { status: 500 });
+    } finally {
+        client.release();
+    }
+}
+
+// NUEVO: Endpoint para generación automática de horarios (2 meses)
+export async function PUT(request: NextRequest) {
+    const client = await pool.connect();
+
+    try {
+        const { meses = 2 } = await request.json();
+
+        console.log(`🚀 Iniciando generación automática para ${meses} meses...`);
+
+        // 1. Obtener empleados
+        const queryUsuarios = `
+            SELECT 
+                u.employeeid,
+                u.nombre,
+                u.campana_id,
+                c.campana
+            FROM usuarios u
+            LEFT JOIN campana c ON u.campana_id = c.id
+            ORDER BY u.employeeid
+        `;
+
+        const usuariosResult = await client.query(queryUsuarios);
+
+        if (usuariosResult.rows.length === 0) {
+            return NextResponse.json(
+                { success: false, message: 'No hay empleados activos para generar horarios' },
+                { status: 400 }
+            );
+        }
+
+        // 2. Determinar rango de fechas
+        const hoy = new Date();
+        const fechaFin = new Date();
+        fechaFin.setMonth(fechaFin.getMonth() + meses);
+
+        // 3. Eliminar horarios futuros existentes
+        await client.query('BEGIN');
+
+        const deleteQuery = `
+            DELETE FROM horarios 
+            WHERE fecha::date >= $1::date 
+            AND fecha::date <= $2::date
+        `;
+
+        await client.query(deleteQuery, [
+            hoy.toISOString().split('T')[0],
+            fechaFin.toISOString().split('T')[0]
+        ]);
+
+        // 4. Generar horarios simples (ejemplo básico)
+        // En una implementación real, aquí iría la lógica compleja de asignación
+        const horariosGenerados = [];
+
+        for (const usuario of usuariosResult.rows) {
+            const fechaActual = new Date(hoy);
+
+            while (fechaActual <= fechaFin) {
+                const fechaStr = fechaActual.toISOString().split('T')[0];
+
+                // Si el usuario está en licencia
+                if (usuario.estado === 'Licencia') {
+                    horariosGenerados.push({
+                        employeeid: usuario.employeeid,
+                        fecha: fechaStr,
+                        hora_entrada: '08:00', // O la lógica que prefieras
+                        tipo_jornada: 'normal'
+                    });
+                } else {
+                    // Asignar horario básico (ejemplo simple)
+                    // En producción, aquí iría la lógica de asignación inteligente
+                    const horaEntrada = '08:00'; // Ejemplo básico
+                    const tipoJornada = 'normal';
+
+                    horariosGenerados.push({
+                        employeeid: usuario.employeeid,
+                        fecha: fechaStr,
+                        hora_entrada: horaEntrada,
+                        tipo_jornada: tipoJornada
+                    });
+                }
+
+                // Siguiente día
+                fechaActual.setDate(fechaActual.getDate() + 1);
+            }
+        }
+
+        // 5. Guardar horarios generados
+        let insertados = 0;
+
+        for (const horario of horariosGenerados) {
+            try {
+                const usuarioRes = await client.query(
+                    "SELECT campana_id FROM usuarios WHERE employeeid = $1",
+                    [horario.employeeid]
+                );
+
+                const campana_id = usuarioRes.rows[0]?.campana_id || 1;
+                const horaEntrada = horario.hora_entrada === "Libre" ? null : horario.hora_entrada;
+                const horasCalculadas = calcularHorasConJornada(horaEntrada, horario.tipo_jornada);
+
+                const insertQuery = `
+                    INSERT INTO horarios (
+                        employeeid, 
+                        fecha, 
+                        hora_entrada, 
+                        break_1,
+                        colacion,
+                        break_2,
+                        hora_salida,
+                        campana_id, 
+                        tipo_jornada,
+                        created_at
+                    )
+                    VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9, NOW())
+                `;
+
+                await client.query(insertQuery, [
+                    horario.employeeid,
+                    horario.fecha,
+                    horaEntrada,
+                    horasCalculadas.break1,
+                    horasCalculadas.colacion,
+                    horasCalculadas.break2,
+                    horasCalculadas.hora_salida,
+                    campana_id,
+                    horario.tipo_jornada
+                ]);
+
+                insertados++;
+
+            } catch (error) {
+                console.error(`Error insertando horario:`, error);
+            }
+        }
+
+        await client.query('COMMIT');
+
+        return NextResponse.json({
+            success: true,
+            message: `Horarios generados automáticamente para ${meses} meses`,
+            resumen: {
+                totalEmpleados: usuariosResult.rows.length,
+                horariosGenerados: horariosGenerados.length,
+                insertados: insertados,
+                rango: {
+                    inicio: hoy.toISOString().split('T')[0],
+                    fin: fechaFin.toISOString().split('T')[0]
+                }
+            }
+        });
+
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        console.error('❌ Error en generación automática:', error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                message: 'Error al generar horarios automáticos',
+                error: error.message
+            },
+            { status: 500 }
+        );
     } finally {
         client.release();
     }
