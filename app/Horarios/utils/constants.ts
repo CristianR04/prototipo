@@ -1,3 +1,6 @@
+// app/Horarios/utils/constants.ts
+import { TipoJornada } from './types';
+
 // Horas disponibles (5:00 a 10:30)
 export const HORAS_OPCIONES: string[] = (() => {
   const opciones = ["Libre"];
@@ -11,10 +14,37 @@ export const HORAS_OPCIONES: string[] = (() => {
 
 // Tipos de jornada
 export const TIPOS_JORNADA = [
-  { value: "normal", label: "Normal", color: "bg-cyan-500", desc: "Jornada completa (10h)" },
-  { value: "entrada_tardia", label: "Entrada tardía", color: "bg-orange-500", desc: "Entra 1h más tarde (9h desde entrada tardía)" },
-  { value: "salida_temprana", label: "Salida temprana", color: "bg-red-500", desc: "Sale 1h más temprano (9h desde entrada original)" },
-];
+  { 
+    value: "normal" as TipoJornada, 
+    label: "Normal", 
+    color: "bg-cyan-500", 
+    desc: "Jornada completa (10h)" 
+  },
+  { 
+    value: "entrada_tardia" as TipoJornada, 
+    label: "Entrada tardía", 
+    color: "bg-orange-500", 
+    desc: "Entra 1h más tarde (9h desde entrada tardía)" 
+  },
+  { 
+    value: "salida_temprana" as TipoJornada, 
+    label: "Salida temprana", 
+    color: "bg-red-500", 
+    desc: "Sale 1h más temprano (9h desde entrada original)" 
+  },
+  { 
+    value: "apertura" as TipoJornada, 
+    label: "Apertura", 
+    color: "bg-green-500", 
+    desc: "Turno de apertura" 
+  },
+  { 
+    value: "cierre" as TipoJornada, 
+    label: "Cierre", 
+    color: "bg-blue-500", 
+    desc: "Turno de cierre" 
+  },
+] as const;
 
 // Fechas
 export const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];

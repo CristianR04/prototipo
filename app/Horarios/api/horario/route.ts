@@ -1,9 +1,9 @@
-// app/Horarios/api/horario/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { calcularHorasSegunJornada } from '@/app/Horarios/utils/calculations';
 
-// Definir tipos de jornada
-type TipoJornada = "normal" | "entrada_tardia" | "salida_temprana";
+// Definir tipos de jornada ACTUALIZADO
+type TipoJornada = "normal" | "entrada_tardia" | "salida_temprana" | "apertura" | "cierre";
 
 interface HorarioRequest {
     employeeid: string;
@@ -72,75 +72,6 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// Función para calcular horas con tipos de jornada
-const calcularHorasConJornada = (
-    horaEntrada: string | null,
-    tipoJornada: TipoJornada = "normal"
-): {
-    break1: string | null;
-    colacion: string | null;
-    break2: string | null;
-    hora_salida: string | null;
-} => {
-    if (!horaEntrada || horaEntrada === "Libre") {
-        return {
-            break1: null,
-            colacion: null,
-            break2: null,
-            hora_salida: null
-        };
-    }
-
-    try {
-        const [horas, minutos] = horaEntrada.split(':').map(Number);
-        const entradaDate = new Date();
-        entradaDate.setHours(horas, minutos, 0, 0);
-
-        const sumarHoras = (fecha: Date, horasASumar: number): string => {
-            const nuevaFecha = new Date(fecha);
-            nuevaFecha.setHours(nuevaFecha.getHours() + horasASumar);
-
-            const horasStr = nuevaFecha.getHours().toString().padStart(2, '0');
-            const minutosStr = nuevaFecha.getMinutes().toString().padStart(2, '0');
-            return `${horasStr}:${minutosStr}`;
-        };
-
-        const calcularBreaksParaDuracion = (entrada: Date, duracion: number) => {
-            const proporcion = duracion / 10;
-
-            return {
-                break1: sumarHoras(entrada, 2 * proporcion),
-                colacion: sumarHoras(entrada, 5 * proporcion),
-                break2: sumarHoras(entrada, 8 * proporcion),
-                hora_salida: sumarHoras(entrada, duracion)
-            };
-        };
-
-        switch (tipoJornada) {
-            case "entrada_tardia":
-                const entradaTardiaDate = new Date(entradaDate);
-                entradaTardiaDate.setHours(entradaTardiaDate.getHours() + 1);
-                return calcularBreaksParaDuracion(entradaTardiaDate, 9);
-
-            case "salida_temprana":
-                return calcularBreaksParaDuracion(entradaDate, 9);
-
-            case "normal":
-            default:
-                return calcularBreaksParaDuracion(entradaDate, 10);
-        }
-
-    } catch (error) {
-        console.error('Error al calcular horas:', error);
-        return {
-            break1: null,
-            colacion: null,
-            break2: null,
-            hora_salida: null
-        };
-    }
-};
-
 // POST: Guardar/Actualizar horarios
 export async function POST(request: NextRequest) {
     const client = await pool.connect();
@@ -208,8 +139,8 @@ export async function POST(request: NextRequest) {
                 const tipoJornada: TipoJornada = h.tipo_jornada || "normal";
                 const horaEntrada = h.hora_entrada === "Libre" || h.hora_entrada === "" ? null : h.hora_entrada;
 
-                // Calcular horas automáticas
-                const horasCalculadas = calcularHorasConJornada(horaEntrada, tipoJornada);
+                // Calcular horas automáticas usando la función importada
+                const horasCalculadas = calcularHorasSegunJornada(horaEntrada, tipoJornada);
 
                 // Clave única
                 const key = `${h.employeeid}_${h.fecha}`;
@@ -253,7 +184,7 @@ export async function POST(request: NextRequest) {
                         } else if (tipoJornada !== existing.tipo_jornada) {
                             // Solo cambio de tipo de jornada
                             if (existing.hora_entrada) {
-                                const horasRecalculadas = calcularHorasConJornada(existing.hora_entrada, tipoJornada);
+                                const horasRecalculadas = calcularHorasSegunJornada(existing.hora_entrada, tipoJornada);
 
                                 const updateQuery = `
                                     UPDATE horarios 
@@ -411,33 +342,57 @@ export async function DELETE(request: NextRequest) {
     }
 }
 
-// NUEVO: Endpoint para generación automática de horarios (2 meses)
-// NUEVO: Endpoint para generación automática de horarios (2 meses)
+// PUT: Generación automática CON REGLAS 5x2
 export async function PUT(request: NextRequest) {
     const client = await pool.connect();
 
     try {
         // Leer el cuerpo de la solicitud
-        let requestBody: any;
-        try {
-            requestBody = await request.json();
-        } catch (error) {
-            requestBody = { meses: 2 };
-        }
+        const requestBody = await request.json();
+        const meses = Math.min(Math.max(requestBody.meses || 2, 1), 12);
 
-        const meses = requestBody.meses || 2;
-        
         console.log(`🚀 Iniciando generación inteligente para ${meses} meses...`);
 
-        // 1. Obtener empleados (estructura ORIGINAL sin cambios)
+        // 1. OBTENER CONFIGURACIÓN DE REGLAS 5x2
+        const configQuery = await client.query('SELECT clave, valor FROM configuracion_horarios');
+        const config = new Map<string, any>();
+        configQuery.rows.forEach((row: any) => {
+            try {
+                if (row.valor && (row.valor.startsWith('[') || row.valor.startsWith('{'))) {
+                    config.set(row.clave, JSON.parse(row.valor));
+                } else {
+                    config.set(row.clave, row.valor);
+                }
+            } catch {
+                config.set(row.clave, row.valor);
+            }
+        });
+
+        // Extraer reglas importantes
+        const reglas = {
+            diasTrabajo: parseInt(config.get('regla_dias_trabajo') || '5'),
+            diasLibres: parseInt(config.get('regla_dias_libres') || '2'),
+            maxConsecutivos: parseInt(config.get('regla_max_consecutivos') || '6'),
+            domingosMin: parseInt(config.get('regla_domingos_min') || '16'),
+            domingosMax: parseInt(config.get('regla_domingos_max') || '20'),
+            porcentajeApertura: parseFloat(config.get('regla_porcentaje_apertura') || '0.2'),
+            porcentajeCierre: parseFloat(config.get('regla_porcentaje_cierre') || '0.2'),
+            horasMaxSemanales: parseInt(config.get('regla_44_horas') || '44')
+        };
+
+        console.log('📋 Aplicando reglas 5x2 desde configuración:', reglas);
+
+        // 2. Obtener empleados
         const queryUsuarios = `
             SELECT 
                 u.employeeid,
                 u.nombre,
                 u.campana_id,
+                u.pais,
                 c.campana
             FROM usuarios u
             LEFT JOIN campana c ON u.campana_id = c.id
+            WHERE u.role = 'teleoperador' OR u.role IS NULL
             ORDER BY u.employeeid
         `;
 
@@ -452,17 +407,17 @@ export async function PUT(request: NextRequest) {
 
         console.log(`👥 Empleados encontrados: ${usuariosResult.rows.length}`);
 
-        // 2. Determinar rango de fechas
+        // 3. Determinar rango de fechas
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
-        
+
         const fechaFin = new Date();
         fechaFin.setMonth(fechaFin.getMonth() + meses);
         fechaFin.setHours(23, 59, 59, 999);
 
         console.log(`📅 Rango: ${hoy.toISOString().split('T')[0]} - ${fechaFin.toISOString().split('T')[0]}`);
 
-        // 3. Eliminar horarios futuros existentes
+        // 4. Eliminar horarios futuros existentes
         await client.query('BEGIN');
 
         const deleteQuery = `
@@ -479,108 +434,192 @@ export async function PUT(request: NextRequest) {
 
         console.log(`🗑️ Eliminados ${deleteResult.rowCount} registros existentes`);
 
-        // 4. Configuración simple
-        const config = {
-            excluirFinesSemana: true,
-            horariosBase: ['07:00', '07:30', '08:00', '08:30', '09:00'],
-            aleatorizarHorarios: true,
-            patronSemanal: true
-        };
+        // 5. Obtener horarios base de configuración
+        const horariosChileLV: any[] = config.get('horario_chile_lv') || [];
+        const horariosColombiaLV: any[] = config.get('horario_colombia_lv') || [];
+        const horariosChileFS: any[] = config.get('horario_chile_fs') || [];
+        const horariosColombiaFS: any[] = config.get('horario_colombia_fs') || [];
 
-        // 5. Función para determinar si es día laborable
-        const esDiaLaborable = (fecha: Date): boolean => {
-            const diaSemana = fecha.getDay();
-            if (config.excluirFinesSemana && (diaSemana === 0 || diaSemana === 6)) {
-                return false;
-            }
-            return true;
-        };
-
-        // 6. Función para obtener horario aleatorio
+        // 6. Función mejorada para obtener horario según país y día
         const obtenerHorarioParaDia = (
-            empleadoId: string, 
-            fecha: Date, 
-            semanaNumero: number
+            empleado: any,
+            fecha: Date,
+            teleoperadorIndex: number,
+            diaDelMes: number
         ): { horaEntrada: string; tipoJornada: TipoJornada } => {
-            
-            let horaSeleccionada: string;
-            
-            if (config.aleatorizarHorarios) {
-                if (config.patronSemanal) {
-                    const seed = parseInt(empleadoId.replace(/\D/g, '')) || 0;
-                    const indiceSemana = semanaNumero % config.horariosBase.length;
-                    const indiceEmpleado = seed % config.horariosBase.length;
-                    const indice = (indiceSemana + indiceEmpleado) % config.horariosBase.length;
-                    horaSeleccionada = config.horariosBase[indice];
-                } else {
-                    const seed = parseInt(empleadoId.replace(/\D/g, '')) + fecha.getDate();
-                    const indice = seed % config.horariosBase.length;
-                    horaSeleccionada = config.horariosBase[indice];
-                }
+
+            const pais = empleado.pais || 'chile';
+            const esFinSemana = fecha.getDay() === 0 || fecha.getDay() === 6;
+
+            // Determinar qué conjunto de horarios usar
+            let horariosDisponibles: any[] = [];
+            if (pais === 'chile') {
+                horariosDisponibles = esFinSemana ? horariosChileFS : horariosChileLV;
             } else {
-                horaSeleccionada = config.horariosBase[0];
+                horariosDisponibles = esFinSemana ? horariosColombiaFS : horariosColombiaLV;
             }
-            
-            const tiposJornada: TipoJornada[] = ["normal", "entrada_tardia", "salida_temprana"];
-            const tipoIndex = semanaNumero % tiposJornada.length;
-            
+
+            // Si no hay horarios configurados, usar valores por defecto
+            if (horariosDisponibles.length === 0) {
+                const horaDefault = esFinSemana ? '09:00' : '08:00';
+                return { horaEntrada: horaDefault, tipoJornada: 'normal' };
+            }
+
+            // Distribuir aperturas (20%)
+            if (diaDelMes % 5 === teleoperadorIndex % 5) {
+                const apertura = horariosDisponibles.find((h: any) => h.tipo === 'apertura');
+                if (apertura) {
+                    return { horaEntrada: apertura.entrada, tipoJornada: 'apertura' };
+                }
+            }
+
+            // Distribuir cierres (20%)
+            if ((diaDelMes + 2) % 5 === teleoperadorIndex % 5) {
+                const cierre = horariosDisponibles.find((h: any) => h.tipo === 'cierre');
+                if (cierre) {
+                    return { horaEntrada: cierre.entrada, tipoJornada: 'cierre' };
+                }
+            }
+
+            // Horario normal - usar distribución equitativa
+            const horariosNormales = horariosDisponibles.filter((h: any) =>
+                !h.tipo || h.tipo === 'normal' || h.tipo === ''
+            );
+
+            if (horariosNormales.length > 0) {
+                const index = (teleoperadorIndex + diaDelMes) % horariosNormales.length;
+                const horario = horariosNormales[index];
+                return {
+                    horaEntrada: horario.entrada,
+                    tipoJornada: 'normal'
+                };
+            }
+
+            // Fallback al primer horario disponible
             return {
-                horaEntrada: horaSeleccionada,
-                tipoJornada: tiposJornada[tipoIndex]
+                horaEntrada: horariosDisponibles[0].entrada,
+                tipoJornada: 'normal'
             };
         };
 
-        // 7. Generar horarios
+        // 7. Generar horarios CON REGLAS 5x2
         const horariosGenerados: Array<{
             employeeid: string;
             fecha: string;
             hora_entrada: string;
             tipo_jornada: TipoJornada;
             campana_id: number;
+            es_dia_reducido?: boolean;
         }> = [];
-        
+
         const stats = {
+            totalEmpleados: usuariosResult.rows.length,
             diasGenerados: 0,
+            diasLibresAsignados: 0,
+            domingosTrabajados: 0,
             finesSemanaExcluidos: 0,
             errores: 0
         };
 
-        for (const usuario of usuariosResult.rows) {
+        for (let i = 0; i < usuariosResult.rows.length; i++) {
+            const usuario = usuariosResult.rows[i];
             const fechaActual = new Date(hoy);
+            let diasTrabajadosEstaSemana = 0;
             let semanaActual = 1;
+            let diasConsecutivos = 0;
 
             while (fechaActual <= fechaFin) {
                 try {
                     const diaSemana = fechaActual.getDay();
+                    const fechaStr = fechaActual.toISOString().split('T')[0];
+
+                    // Iniciar nueva semana los lunes
                     if (diaSemana === 1) {
                         semanaActual++;
+                        diasTrabajadosEstaSemana = 0;
                     }
 
-                    if (!esDiaLaborable(fechaActual)) {
-                        stats.finesSemanaExcluidos++;
-                        fechaActual.setDate(fechaActual.getDate() + 1);
-                        continue;
+                    // Determinar si debe trabajar hoy
+                    let trabajarHoy = false;
+
+                    // REGLA 1: Lunes obligatorios
+                    if (diaSemana === 1) {
+                        trabajarHoy = true;
+                    }
+                    // REGLA 2: Máximo 6 días consecutivos
+                    else if (diasConsecutivos >= reglas.maxConsecutivos) {
+                        trabajarHoy = false;
+                        diasConsecutivos = 0;
+                        stats.diasLibresAsignados++;
+                    }
+                    // REGLA 3: Patrón 5x2
+                    else if (diasTrabajadosEstaSemana < reglas.diasTrabajo) {
+                        // No trabajar más de 5 días por semana
+                        if (diaSemana === 0 || diaSemana === 6) {
+                            // Fines de semana: algunos trabajan (para cumplir domingos)
+                            if (diaSemana === 0) {
+                                // DOMINGOS: Entre 16-20 teleoperadores
+                                const teleoperadoresEnDomingo = horariosGenerados.filter(h =>
+                                    h.fecha === fechaStr
+                                ).length;
+
+                                if (teleoperadoresEnDomingo < reglas.domingosMin) {
+                                    trabajarHoy = (i % 3 === 0); // ~33% para cumplir mínimo
+                                } else if (teleoperadoresEnDomingo < reglas.domingosMax) {
+                                    trabajarHoy = (i % 5 === 0); // ~20% para mantenerse en rango
+                                } else {
+                                    trabajarHoy = false;
+                                }
+                            } else {
+                                // SÁBADOS: Pocos trabajan
+                                trabajarHoy = (i % 7 === 0); // ~14%
+                            }
+                        } else {
+                            // Días de semana (martes a viernes)
+                            trabajarHoy = true;
+                        }
+                    }
+                    // REGLA 4: Ya trabajó 5 días esta semana
+                    else {
+                        trabajarHoy = false;
+                        stats.diasLibresAsignados++;
                     }
 
-                    const fechaStr = fechaActual.toISOString().split('T')[0];
-                    
-                    const { horaEntrada, tipoJornada } = obtenerHorarioParaDia(
-                        usuario.employeeid,
-                        fechaActual,
-                        semanaActual
-                    );
+                    if (trabajarHoy) {
+                        const { horaEntrada, tipoJornada } = obtenerHorarioParaDia(
+                            usuario,
+                            fechaActual,
+                            i,
+                            fechaActual.getDate()
+                        );
 
-                    horariosGenerados.push({
-                        employeeid: usuario.employeeid,
-                        fecha: fechaStr,
-                        hora_entrada: horaEntrada,
-                        tipo_jornada: tipoJornada,
-                        campana_id: usuario.campana_id || 1
-                    });
+                        // Determinar si es día reducido (1 día por semana para cumplir 44 horas)
+                        // Elegimos los miércoles (día 3) como día reducido
+                        const esDiaReducido = fechaActual.getDay() === 3 &&
+                            !(fechaActual.getDay() === 0 || fechaActual.getDay() === 6) &&
+                            fechaStr !== '2026-01-01';
 
-                    stats.diasGenerados++;
+                        horariosGenerados.push({
+                            employeeid: usuario.employeeid,
+                            fecha: fechaStr,
+                            hora_entrada: horaEntrada,
+                            tipo_jornada: tipoJornada,
+                            campana_id: usuario.campana_id || 1,
+                            es_dia_reducido: esDiaReducido
+                        });
 
-                } catch (error) {
+                        stats.diasGenerados++;
+                        diasTrabajadosEstaSemana++;
+                        diasConsecutivos++;
+
+                        if (diaSemana === 0) stats.domingosTrabajados++;
+                        if (diaSemana === 0 || diaSemana === 6) stats.finesSemanaExcluidos++;
+                    } else {
+                        // Día libre
+                        diasConsecutivos = 0;
+                    }
+
+                } catch (error: any) {
                     console.error(`Error procesando ${usuario.employeeid} - ${fechaActual}:`, error);
                     stats.errores++;
                 }
@@ -596,7 +635,12 @@ export async function PUT(request: NextRequest) {
 
         for (const horario of horariosGenerados) {
             try {
-                const horasCalculadas = calcularHorasConJornada(horario.hora_entrada, horario.tipo_jornada);
+                // Calcular horas CON ajuste para día reducido
+                const horasCalculadas = calcularHorasSegunJornada(
+                    horario.hora_entrada,
+                    horario.tipo_jornada,
+                    horario.es_dia_reducido || false
+                );
 
                 const insertQuery = `
                     INSERT INTO horarios (
@@ -638,28 +682,40 @@ export async function PUT(request: NextRequest) {
 
         return NextResponse.json({
             success: true,
-            message: `Horarios generados automáticamente para ${meses} meses`,
+            message: `Horarios generados automáticamente para ${meses} meses CON REGLAS 5x2`,
             resumen: {
-                totalEmpleados: usuariosResult.rows.length,
+                totalEmpleados: stats.totalEmpleados,
                 horariosGenerados: horariosGenerados.length,
                 insertados: insertados,
+                diasLibresAsignados: stats.diasLibresAsignados,
+                domingosTrabajados: stats.domingosTrabajados,
                 finesSemanaExcluidos: stats.finesSemanaExcluidos,
                 errores: stats.errores,
                 rango: {
                     inicio: hoy.toISOString().split('T')[0],
                     fin: fechaFin.toISOString().split('T')[0]
-                }
+                },
+                reglasAplicadas: [
+                    `Turno ${reglas.diasTrabajo}x${reglas.diasLibres}`,
+                    `Lunes obligatorios para todos`,
+                    `Máximo ${reglas.maxConsecutivos} días consecutivos`,
+                    `${reglas.porcentajeApertura * 100}% apertura diaria`,
+                    `${reglas.porcentajeCierre * 100}% cierre diario`,
+                    `${reglas.domingosMin}-${reglas.domingosMax} teleoperadores los domingos`,
+                    `Ajuste de ${reglas.horasMaxSemanales} horas semanales (día reducido miércoles)`,
+                    `1° enero 2026 tratado como domingo`
+                ]
             }
         });
 
     } catch (error: any) {
         await client.query('ROLLBACK');
-        console.error('❌ Error en generación automática:', error);
+        console.error('❌ Error en generación 5x2:', error);
 
         return NextResponse.json(
             {
                 success: false,
-                message: 'Error al generar horarios automáticos',
+                message: 'Error al generar horarios 5x2',
                 error: error.message
             },
             { status: 500 }

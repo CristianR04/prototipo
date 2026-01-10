@@ -1,11 +1,15 @@
+// app/Horarios/components/HorariosMain.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from 'react';
 import { useTablaHorarios } from "../hooks/useTablaHorarios";
-import TablaHorariosUI from "./TableUI";
+import TablaHorariosUI from "./TablaHorariosUI";
 import TablaHorariosBody from "./TableBody";
+import ConfiguracionCompacta from "./ConfiguracionCompacta";
 
-// Componente para generación automática (puedes moverlo a un archivo separado si prefieres)
+
+
+// Componente para generación automática
 const GeneradorAutomatico = ({ onGenerar, isLoading }: { 
   onGenerar: (meses: number) => Promise<void>; 
   isLoading: boolean 
@@ -103,7 +107,7 @@ const GeneradorAutomatico = ({ onGenerar, isLoading }: {
   );
 };
 
-export default function TablaHorariosSimplificada() {
+export default function HorariosMain() {
   const {
     // Estados
     usuarios,
@@ -170,6 +174,9 @@ export default function TablaHorariosSimplificada() {
     AÑOS_DISPONIBLES
   } = useTablaHorarios();
 
+  // Estado para mostrar configuración
+  const [mostrarConfiguracion, setMostrarConfiguracion] = useState(false);
+
   // Render condicional
   if (isLoadingUsuarios) {
     return (
@@ -215,6 +222,15 @@ export default function TablaHorariosSimplificada() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Botón de Configuración */}
+          <button
+            onClick={() => setMostrarConfiguracion(true)}
+            className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-2"
+          >
+            <span>⚙️</span>
+            <span>Configuración</span>
+          </button>
+
           {modoSeleccion && celdasSeleccionadas.length > 0 && (
             <div className={`px-3 py-1.5 border rounded-lg text-sm ${
               modoSeleccion === "rango" 
@@ -360,6 +376,15 @@ export default function TablaHorariosSimplificada() {
           </button>
         </div>
       </div>
+
+      {/* Modal de Configuración */}
+      {mostrarConfiguracion && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden">
+            <ConfiguracionCompacta onClose={() => setMostrarConfiguracion(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

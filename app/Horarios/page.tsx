@@ -1,4 +1,4 @@
-import TablaHorariosSimplificada from "./components/Form";
+import TablaHorariosSimplificada from "./components/HorariosMain";
 
 export default function HorariosPage() {
     return (

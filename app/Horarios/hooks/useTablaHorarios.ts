@@ -1,27 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  Usuario, 
-  HorarioCompleto, 
-  FechaDia, 
-  CeldaSeleccionada, 
+import {
+  Usuario,
+  HorarioCompleto,
+  FechaDia,
+  CeldaSeleccionada,
   TipoJornada,
   ModoSeleccion,
   VistaFecha,
   ConfigFechas,
-  MensajeUI 
+  MensajeUI
 } from '../utils/types';
-import { 
-  HOY, 
+import {
+  HOY,
   AÑO_ACTUAL,
   AÑOS_DISPONIBLES,
   HORAS_OPCIONES,
-  TIPOS_JORNADA 
+  TIPOS_JORNADA
 } from '../utils/constants';
-import { 
-  dateCalculations, 
-  timeCalculations, 
+import {
+  dateCalculations,
   selectionCalculations,
-  formatters 
+  formatters,
+  calcularHorasSegunJornada
 } from '../utils/calculations';
 
 export const useTablaHorarios = () => {
@@ -32,7 +32,7 @@ export const useTablaHorarios = () => {
   const [horariosOriginales, setHorariosOriginales] = useState<Record<string, HorarioCompleto>>({});
   const [horasEntrada, setHorasEntrada] = useState<Record<string, string>>({});
   const [tiposJornada, setTiposJornada] = useState<Record<string, TipoJornada>>({});
-  
+
   // ==================== ESTADOS DE UI ====================
   const [isHydrated, setIsHydrated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,7 +40,8 @@ export const useTablaHorarios = () => {
   const [mensaje, setMensaje] = useState<MensajeUI | null>(null);
   const [modoSeleccion, setModoSeleccion] = useState<ModoSeleccion | null>(null);
   const [celdasSeleccionadas, setCeldasSeleccionadas] = useState<CeldaSeleccionada[]>([]);
-  
+  const [mostrarGenerador5x2, setMostrarGenerador5x2] = useState(false);
+
   // ==================== ESTADOS DE FECHAS ====================
   const [configFechas, setConfigFechas] = useState<ConfigFechas>({
     vista: "mes",
@@ -52,37 +53,18 @@ export const useTablaHorarios = () => {
   // ==================== REFS ====================
   const inicioSeleccionRef = useRef<{ employeeid: string; fecha: string } | null>(null);
 
-  // ==================== MEMOIZED VALUES ====================
-  const cambiosPendientes = Object.keys(horarios).filter(key => {
-    const actual = horarios[key];
-    const original = horariosOriginales[key];
-    if (!original) return true;
-    
-    return (
-      actual.hora_entrada !== original.hora_entrada ||
-      actual.tipo_jornada !== original.tipo_jornada ||
-      actual.hora_salida !== original.hora_salida ||
-      actual.break_1 !== original.break_1 ||
-      actual.colacion !== original.colacion ||
-      actual.break_2 !== original.break_2
-    );
-  }).length;
-
-  const todasCeldasSeleccionadas = celdasSeleccionadas.length === usuarios.length * fechas.length;
-  const textoRangoFechas = formatters.getRangoFechasTexto(fechas);
-  const textoSemana = formatters.getSemanaTexto(configFechas.fechaRef);
-
   // ==================== API FUNCTIONS ====================
   const fetchAPI = useCallback(async <T>(url: string, options?: RequestInit): Promise<T> => {
-    const response = await fetch(url, { 
+    const response = await fetch(url, {
       cache: "no-store",
-      ...options 
+      ...options
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || `Error ${response.status}`);
     return data;
   }, []);
 
+  // ==================== CARGA DE USUARIOS ====================
   const cargarUsuarios = useCallback(async () => {
     try {
       setIsLoadingUsuarios(true);
@@ -97,6 +79,7 @@ export const useTablaHorarios = () => {
     }
   }, [fetchAPI]);
 
+  // ==================== CARGA DE HORARIOS ====================
   const cargarHorarios = useCallback(async () => {
     try {
       if (usuarios.length === 0 || fechas.length === 0) return;
@@ -104,7 +87,7 @@ export const useTablaHorarios = () => {
       const fechaInicio = fechas[0].fullDate;
       const fechaFin = fechas[fechas.length - 1].fullDate;
       const url = `/Horarios/api/horario?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
-      
+
       const data = await fetchAPI<{ success: boolean; horarios: any[] }>(url);
 
       // Inicializar estructuras
@@ -123,10 +106,10 @@ export const useTablaHorarios = () => {
             break_1: null,
             colacion: null,
             break_2: null,
-            tipo_jornada: "normal"
+            tipo_jornada: "normal" as TipoJornada
           };
           horasEntradaTemp[key] = "Libre";
-          tiposJornadaTemp[key] = "normal";
+          tiposJornadaTemp[key] = "normal" as TipoJornada;
         });
       });
 
@@ -134,10 +117,10 @@ export const useTablaHorarios = () => {
       data.horarios?.forEach((registro: any) => {
         const key = `${registro.employeeid}-${registro.fecha}`;
         if (horariosTemp[key]) {
-          const tipoJornada: TipoJornada = 
-            ["normal", "entrada_tardia", "salida_temprana"].includes(registro.tipo_jornada)
-            ? registro.tipo_jornada
-            : "normal";
+          const tipoJornada: TipoJornada =
+            ["normal", "entrada_tardia", "salida_temprana", "apertura", "cierre"].includes(registro.tipo_jornada)
+              ? registro.tipo_jornada as TipoJornada
+              : "normal" as TipoJornada;
 
           horariosTemp[key] = {
             ...horariosTemp[key],
@@ -149,8 +132,8 @@ export const useTablaHorarios = () => {
             tipo_jornada: tipoJornada
           };
 
-          horasEntradaTemp[key] = registro.hora_entrada 
-            ? registro.hora_entrada.substring(0, 5) 
+          horasEntradaTemp[key] = registro.hora_entrada
+            ? registro.hora_entrada.substring(0, 5)
             : "Libre";
           tiposJornadaTemp[key] = tipoJornada;
         }
@@ -161,14 +144,14 @@ export const useTablaHorarios = () => {
       setHorasEntrada(horasEntradaTemp);
       setTiposJornada(tiposJornadaTemp);
       setIsHydrated(true);
-      
+
     } catch (error: any) {
       console.error("❌ Error cargando horarios:", error);
       setMensaje({ tipo: "error", texto: `Error al cargar horarios: ${error.message}` });
     }
   }, [usuarios, fechas, fetchAPI]);
 
-  // ==================== FUNCIÓN DE GENERACIÓN AUTOMÁTICA ====================
+  // ==================== FUNCIÓN DE GENERACIÓN AUTOMÁTICA SIMPLE ====================
   const generarHorariosAutomaticos = useCallback(async (meses: number = 2) => {
     if (usuarios.length === 0) {
       setMensaje({ tipo: "error", texto: "No hay usuarios para generar horarios" });
@@ -181,40 +164,112 @@ export const useTablaHorarios = () => {
     try {
       const response = await fetch('/Horarios/api/horario', {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json' 
+        headers: {
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ meses })
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Error al generar horarios');
       }
 
       // Recargar los horarios después de la generación
       await cargarHorarios();
-      
-      setMensaje({ 
-        tipo: 'success', 
-        texto: `✅ ${data.message} (${data.resumen?.insertados || 0} horarios generados)` 
+
+      setMensaje({
+        tipo: 'success',
+        texto: `✅ ${data.message} (${data.resumen?.insertados || 0} horarios generados)`
       });
 
       // Recargar usuarios también por si hubo cambios
       await cargarUsuarios();
 
     } catch (error: any) {
-      setMensaje({ 
-        tipo: 'error', 
-        texto: `Error al generar horarios: ${error.message}` 
+      setMensaje({
+        tipo: 'error',
+        texto: `Error al generar horarios: ${error.message}`
       });
     } finally {
       setIsLoading(false);
     }
   }, [usuarios.length, cargarHorarios, cargarUsuarios]);
 
+  // ==================== FUNCIÓN DE GENERACIÓN MALLA 5x2 ====================
+  const generarMalla5x2 = useCallback(async (params: {
+    fecha_inicio: string;
+    fecha_fin: string;
+    employeeids?: string[];
+  }) => {
+    if (usuarios.length === 0) {
+      setMensaje({ tipo: "error", texto: "No hay usuarios para generar horarios" });
+      return;
+    }
+
+    setIsLoading(true);
+    setMensaje({
+      tipo: "info",
+      texto: `🚀 Generando malla 5x2 del ${params.fecha_inicio} al ${params.fecha_fin}...`
+    });
+
+    try {
+      // Usamos POST en lugar de PUT con tipo='5x2'
+      const response = await fetch('/Horarios/api/horario', {
+        method: 'POST', // Cambiado a POST
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tipo: '5x2',
+          ...params
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Error al generar malla 5x2');
+      }
+
+      // Recargar los horarios después de la generación
+      await cargarHorarios();
+
+      setMensaje({
+        tipo: 'success',
+        texto: `✅ ${data.message}`
+      });
+
+      setMostrarGenerador5x2(false);
+
+    } catch (error: any) {
+      setMensaje({
+        tipo: 'error',
+        texto: `Error al generar malla: ${error.message}`
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [usuarios.length, cargarHorarios]);
+
+  // ==================== GUARDAR HORARIOS ====================
   const guardarHorarios = useCallback(async () => {
+    const cambiosPendientes = Object.keys(horarios).filter(key => {
+      const actual = horarios[key];
+      const original = horariosOriginales[key];
+      if (!original) return true;
+
+      return (
+        actual.hora_entrada !== original.hora_entrada ||
+        actual.tipo_jornada !== original.tipo_jornada ||
+        actual.hora_salida !== original.hora_salida ||
+        actual.break_1 !== original.break_1 ||
+        actual.colacion !== original.colacion ||
+        actual.break_2 !== original.break_2
+      );
+    }).length;
+
     if (cambiosPendientes === 0) {
       setMensaje({ tipo: "error", texto: "No hay cambios para guardar" });
       return;
@@ -248,19 +303,19 @@ export const useTablaHorarios = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [cambiosPendientes, horarios, cargarHorarios]);
+  }, [horarios, horariosOriginales, cargarHorarios]);
 
   // ==================== FUNCIONES DE CAMBIO ====================
   const cambiarTipoJornada = useCallback((employeeid: string, fecha: string, tipo: TipoJornada) => {
     const key = `${employeeid}-${fecha}`;
-    
+
     setTiposJornada(prev => ({ ...prev, [key]: tipo }));
 
     const horaEntradaActual = horasEntrada[key] !== "Libre" ? horasEntrada[key] : null;
-    
+
     if (horaEntradaActual) {
-      const nuevasHoras = timeCalculations.calcularHorasSegunJornada(horaEntradaActual, tipo);
-      
+      const nuevasHoras = calcularHorasSegunJornada(horaEntradaActual, tipo);
+
       setHorarios(prev => ({
         ...prev,
         [key]: {
@@ -284,14 +339,14 @@ export const useTablaHorarios = () => {
 
   const cambiarHoraEntrada = useCallback((employeeid: string, fecha: string, hora: string) => {
     const key = `${employeeid}-${fecha}`;
-    
+
     setHorasEntrada(prev => ({ ...prev, [key]: hora }));
 
-    const tipoJornadaActual = tiposJornada[key] || "normal";
-    
+    const tipoJornadaActual = tiposJornada[key] || "normal" as TipoJornada;
+
     if (hora !== "Libre") {
-      const nuevasHoras = timeCalculations.calcularHorasSegunJornada(hora, tipoJornadaActual);
-      
+      const nuevasHoras = calcularHorasSegunJornada(hora, tipoJornadaActual);
+
       setHorarios(prev => ({
         ...prev,
         [key]: {
@@ -332,7 +387,7 @@ export const useTablaHorarios = () => {
     if (!modoSeleccion) return;
 
     const existe = selectionCalculations.estaSeleccionada(celdasSeleccionadas, employeeid, fecha);
-    
+
     setCeldasSeleccionadas(prev => existe
       ? prev.filter(c => !(c.employeeid === employeeid && c.fecha === fecha))
       : [...prev, { employeeid, fecha }]
@@ -341,7 +396,7 @@ export const useTablaHorarios = () => {
 
   const handleMouseDownCelda = useCallback((employeeid: string, fecha: string, e: React.MouseEvent) => {
     if (!modoSeleccion) return;
-    
+
     if (modoSeleccion === "rango") {
       e.preventDefault();
       inicioSeleccionRef.current = { employeeid, fecha };
@@ -357,7 +412,7 @@ export const useTablaHorarios = () => {
 
   const handleMouseEnterCelda = useCallback((employeeid: string, fecha: string) => {
     if (modoSeleccion !== "rango" || !inicioSeleccionRef.current) return;
-    
+
     const { employeeid: startEmployeeid, fecha: startFecha } = inicioSeleccionRef.current;
     const nuevasCeldas = selectionCalculations.seleccionarRango(
       startEmployeeid,
@@ -390,7 +445,7 @@ export const useTablaHorarios = () => {
     const columnaCompletaSeleccionada = celdasColumna.every(celda =>
       selectionCalculations.estaSeleccionada(celdasSeleccionadas, celda.employeeid, celda.fecha)
     );
-    
+
     if (columnaCompletaSeleccionada) {
       setCeldasSeleccionadas(prev => prev.filter(celda => celda.fecha !== fecha));
     } else {
@@ -418,16 +473,16 @@ export const useTablaHorarios = () => {
 
     const nuevosTiposJornada = { ...tiposJornada };
     const nuevosHorarios = { ...horarios };
-    
+
     celdasSeleccionadas.forEach(({ employeeid, fecha }) => {
       const key = `${employeeid}-${fecha}`;
-      
+
       nuevosTiposJornada[key] = tipo;
-      
+
       const horaEntradaActual = horasEntrada[key];
       if (horaEntradaActual && horaEntradaActual !== "Libre") {
-        const nuevasHoras = timeCalculations.calcularHorasSegunJornada(horaEntradaActual, tipo);
-        
+        const nuevasHoras = calcularHorasSegunJornada(horaEntradaActual, tipo);
+
         nuevosHorarios[key] = {
           ...nuevosHorarios[key],
           tipo_jornada: tipo,
@@ -462,16 +517,16 @@ export const useTablaHorarios = () => {
 
     const nuevasHorasEntrada = { ...horasEntrada };
     const nuevosHorarios = { ...horarios };
-    
+
     celdasSeleccionadas.forEach(({ employeeid, fecha }) => {
       const key = `${employeeid}-${fecha}`;
-      const tipoJornadaActual = tiposJornada[key] || "normal";
-      
+      const tipoJornadaActual = tiposJornada[key] || "normal" as TipoJornada;
+
       nuevasHorasEntrada[key] = hora;
-      
+
       if (hora !== "Libre") {
-        const nuevasHoras = timeCalculations.calcularHorasSegunJornada(hora, tipoJornadaActual);
-        
+        const nuevasHoras = calcularHorasSegunJornada(hora, tipoJornadaActual);
+
         nuevosHorarios[key] = {
           ...nuevosHorarios[key],
           hora_entrada: hora,
@@ -530,21 +585,22 @@ export const useTablaHorarios = () => {
     setConfigFechas(prev => dateCalculations.seleccionarSemanaActual(prev));
   }, []);
 
+  // ==================== FUNCIONES PRINCIPALES ====================
   const handleRevertir = useCallback(() => {
     setHorarios(JSON.parse(JSON.stringify(horariosOriginales)));
-    
+
     const horasEntradaRevertidas: Record<string, string> = {};
     const tiposJornadaRevertidos: Record<string, TipoJornada> = {};
-    
+
     Object.keys(horariosOriginales).forEach(key => {
       const horario = horariosOriginales[key];
       horasEntradaRevertidas[key] = horario.hora_entrada || "Libre";
       tiposJornadaRevertidos[key] = horario.tipo_jornada;
     });
-    
+
     setHorasEntrada(horasEntradaRevertidas);
     setTiposJornada(tiposJornadaRevertidos);
-    
+
     setMensaje({ tipo: "success", texto: "Cambios revertidos" });
     limpiarSeleccion();
   }, [horariosOriginales, limpiarSeleccion]);
@@ -555,9 +611,29 @@ export const useTablaHorarios = () => {
     limpiarSeleccion();
   }, [cargarUsuarios, limpiarSeleccion]);
 
+  // ==================== VALORES CALCULADOS ====================
+  const cambiosPendientes = Object.keys(horarios).filter(key => {
+    const actual = horarios[key];
+    const original = horariosOriginales[key];
+    if (!original) return true;
+
+    return (
+      actual.hora_entrada !== original.hora_entrada ||
+      actual.tipo_jornada !== original.tipo_jornada ||
+      actual.hora_salida !== original.hora_salida ||
+      actual.break_1 !== original.break_1 ||
+      actual.colacion !== original.colacion ||
+      actual.break_2 !== original.break_2
+    );
+  }).length;
+
+  const todasCeldasSeleccionadas = celdasSeleccionadas.length === usuarios.length * fechas.length;
+  const textoRangoFechas = formatters.getRangoFechasTexto(fechas);
+  const textoSemana = formatters.getSemanaTexto(configFechas.fechaRef);
+
   // ==================== EFFECTS ====================
-  useEffect(() => { 
-    cargarUsuarios(); 
+  useEffect(() => {
+    cargarUsuarios();
   }, [cargarUsuarios]);
 
   useEffect(() => {
@@ -565,9 +641,9 @@ export const useTablaHorarios = () => {
     setFechas(nuevasFechas);
   }, [configFechas]);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (usuarios.length > 0 && fechas.length > 0 && isHydrated) {
-      cargarHorarios(); 
+      cargarHorarios();
     }
   }, [usuarios, fechas, isHydrated, cargarHorarios]);
 
@@ -587,24 +663,27 @@ export const useTablaHorarios = () => {
     modoSeleccion,
     celdasSeleccionadas,
     configFechas,
-    
+    mostrarGenerador5x2,
+
     // Valores calculados
     cambiosPendientes,
     todasCeldasSeleccionadas,
     textoRangoFechas,
     textoSemana,
-    
+
     // Setters
     setMensaje,
-    
+    setMostrarGenerador5x2,
+
     // Funciones de API
     guardarHorarios,
-    generarHorariosAutomaticos, // NUEVO: función de generación automática
-    
+    generarHorariosAutomaticos,
+    generarMalla5x2,
+
     // Funciones de cambio
     cambiarTipoJornada,
     cambiarHoraEntrada,
-    
+
     // Funciones de selección
     limpiarSeleccion,
     toggleSeleccionCelda,
@@ -615,13 +694,13 @@ export const useTablaHorarios = () => {
     seleccionarFila,
     toggleSeleccionColumna,
     toggleModoSeleccion,
-    estaSeleccionada: (employeeid: string, fecha: string) => 
+    estaSeleccionada: (employeeid: string, fecha: string) =>
       selectionCalculations.estaSeleccionada(celdasSeleccionadas, employeeid, fecha),
-    
+
     // Funciones globales
     aplicarTipoJornadaGlobal,
     aplicarHoraGlobal,
-    
+
     // Funciones de fechas
     cambiarVista,
     cambiarAño,
@@ -630,11 +709,11 @@ export const useTablaHorarios = () => {
     cambiarAñoNavigation,
     seleccionarMesActual,
     seleccionarSemanaActual,
-    
+
     // Funciones principales
     handleRevertir,
     handleRecargarUsuarios,
-    
+
     // Constantes
     HORAS_OPCIONES,
     TIPOS_JORNADA,

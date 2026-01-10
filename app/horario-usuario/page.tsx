@@ -2,22 +2,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-    Horario, 
+import {
+    Horario,
     ResumenUsuario,
-    meses, 
-    diasSemana, 
-    normalizarFecha, 
-    getCalendarioMes, 
-    getDiasDeSemana, 
-    formatFechaString, 
-    formatHora, 
-    calcularResumenUsuario, 
-    getHorarioDelDia, 
-    getTextoSemana, 
-    cambiarMes, 
-    esHoy, 
-    esFinDeSemana 
+    meses,
+    diasSemana,
+    normalizarFecha,
+    getCalendarioMes,
+    getDiasDeSemana,
+    formatFechaString,
+    formatHora,
+    calcularResumenUsuario,
+    getHorarioDelDia,
+    getTextoSemana,
+    cambiarMes,
+    esHoy,
+    esFinDeSemana,
+    esDiaLibre
 } from './utils/fechaUtils';
 
 // Definir tipos adicionales en el mismo archivo
@@ -63,93 +64,155 @@ export default function HorariosUsuariosPage() {
         cargarHorarios();
     }, []);
 
-    // Componente de celda de calendario - CON DISEÑO ACTUALIZADO
+    // Versión corregida - Sin superposiciones y con márgenes adecuados
     const CeldaCalendario = ({ fecha, horario }: { fecha: Date; horario?: Horario }) => {
         const hoy = esHoy(fecha);
         const finDeSemana = esFinDeSemana(fecha);
-        const esDiaLibre = !horario?.hora_entrada;
-        const tieneHorario = !!horario;
+        const diaLibre = esDiaLibre(horario);
+        const esDiaDelMes = fecha.getMonth() === fechaActual.getMonth();
+
+        if (!esDiaDelMes) return <div className="min-h-[85px]"></div>;
 
         return (
             <div className={`
-                relative p-2 min-h-[85px] border border-gray-200 dark:border-gray-700 rounded-lg
-                ${finDeSemana ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-800/50'}
-                ${esDiaLibre ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}
-                ${hoy ? 'ring-2 ring-violet-500/50 bg-violet-50 dark:bg-violet-900/20' : ''}
-                hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200
-                shadow-sm
-            `}>
-                <div className="absolute top-1.5 right-1.5">
-                    <span className={`
-                        text-xs font-medium px-2 py-0.5 rounded-full
-                        ${hoy ? 'bg-violet-600 text-white' :
-                            finDeSemana ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' : 
-                            'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'}
-                    `}>
-                        {fecha.getDate()}
-                    </span>
+            relative min-h-[85px] p-2 border rounded-lg group overflow-hidden
+            ${hoy ? 'bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/15 dark:to-blue-800/15 border-blue-200 dark:border-blue-700' :
+                    diaLibre ? 'bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-900/10 dark:to-amber-800/10 border-amber-200 dark:border-amber-700' :
+                        finDeSemana ? 'bg-gradient-to-br from-gray-50 to-gray-100/50 dark:from-gray-800/50 dark:to-gray-900/50 border-gray-200 dark:border-gray-700' :
+                            'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}
+        `}>
+                {/* Fecha en esquina - CON ESPACIO RESERVADO */}
+                <div className="absolute top-0 left-0 z-10">
+                    <div className={`
+                    flex flex-col items-center justify-center 
+                    ${hoy ? 'bg-blue-600' :
+                            diaLibre ? 'bg-amber-500' :
+                                finDeSemana ? 'bg-gray-400 dark:bg-gray-700' :
+                                    'bg-gray-300 dark:bg-gray-700'}
+                    rounded-br-lg px-2 py-1
+                `}>
+                        <span className="text-xs font-bold text-white">
+                            {fecha.getDate()}
+                        </span>
+                        <span className="text-[8px] text-white/80">
+                            {fecha.toLocaleDateString('es-ES', { weekday: 'short' }).charAt(0)}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="mt-6">
-                    {horario?.hora_entrada ? (
-                        <div className="space-y-1.5">
-                            <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Entrada:</span>
-                                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded">
-                                        {formatHora(horario.hora_entrada)}
-                                    </span>
+                {/* Contenido principal - CON MARGEN PARA LA FECHA */}
+                <div className="h-full flex items-center justify-center pt-3 ml-8">
+                    {horario?.hora_entrada && horario.hora_entrada !== "Libre" ? (
+                        <>
+                            {/* ENTRADA - IZQUIERDA */}
+                            <div className="flex flex-col items-center flex-1 max-w-[30%]">
+                                <div className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-0.5 uppercase tracking-wider">
+                                    Entrada
                                 </div>
+                                <div className="text-base font-bold text-emerald-800 dark:text-emerald-300">
+                                    {formatHora(horario.hora_entrada)}
+                                </div>
+                            </div>
 
-                                {horario.hora_salida && (
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-gray-500 dark:text-gray-400">Salida:</span>
-                                        <span className="text-xs font-medium text-emerald-500 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded">
-                                            {formatHora(horario.hora_salida)}
-                                        </span>
+                            {/* SEPARADOR VISUAL - CENTRO */}
+                            <div className="flex flex-col items-center mx-2">
+                                <div className="w-6 h-0.5 bg-gradient-to-r from-emerald-400 to-indigo-400 dark:from-emerald-500 dark:to-indigo-500 rounded-full mb-1"></div>
+                                <div className="text-[8px] text-gray-400 dark:text-gray-500">→</div>
+                                <div className="w-6 h-0.5 bg-gradient-to-r from-indigo-400 to-emerald-400 dark:from-indigo-500 dark:to-emerald-500 rounded-full mt-1"></div>
+                            </div>
+
+                            {/* SALIDA - DERECHA */}
+                            {horario.hora_salida && (
+                                <div className="flex flex-col items-center flex-1 max-w-[45%]">
+                                    <div className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-400 mb-0.5 uppercase tracking-wider">
+                                        Salida
                                     </div>
-                                )}
-                            </div>
-
-                            <div className="pt-1 border-t border-gray-100 dark:border-gray-700/50">
-                                <div className="grid grid-cols-2 gap-x-1.5 gap-y-1">
-                                    {horario.break_1 && (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] text-gray-500 dark:text-gray-500">B1:</span>
-                                            <span className="text-[10px] text-gray-700 dark:text-gray-300">
-                                                {formatHora(horario.break_1)}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    {horario.colacion && (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] text-gray-500 dark:text-gray-500">Col:</span>
-                                            <span className="text-[10px] text-gray-700 dark:text-gray-300">
-                                                {formatHora(horario.colacion)}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    {horario.break_2 && (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] text-gray-500 dark:text-gray-500">B2:</span>
-                                            <span className="text-[10px] text-gray-700 dark:text-gray-300">
-                                                {formatHora(horario.break_2)}
-                                            </span>
-                                        </div>
-                                    )}
+                                    <div className="text-base font-bold text-indigo-800 dark:text-indigo-300">
+                                        {formatHora(horario.hora_salida)}
+                                    </div>
                                 </div>
+                            )}
+
+                            {/* OVERLAY DE DESCANSO - CONTENIDO DENTRO DE LÍMITES */}
+                            {(horario.break_1 || horario.colacion || horario.break_2) && (
+                                <div
+                                    className="absolute inset-0
+                                        bg-white/97 dark:bg-gray-800/97 rounded-lg
+                                        opacity-0 group-hover:opacity-100 transition-all duration-300
+                                        flex items-center justify-center
+                                        shadow-xl z-20
+                                        border border-gray-300/30 dark:border-gray-600/30
+                                        m-1 overflow-hidden"
+                                >
+
+                                    {/* Contenido del overlay - CON PADDING ADECUADO */}
+                                    <div className="text-center w-full px-2 translate-y-0">
+                                        <div className="text-[10px] font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wide">
+                                            🕐 Horarios de Descanso
+                                        </div>
+
+                                        {/* Descansos en tarjetas - COMPACTAS */}
+                                        <div className="grid grid-cols-3 gap-1.5 max-w-full px-1">
+                                            {horario.break_1 && (
+                                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/25 dark:to-blue-800/25 
+                                                          border border-blue-200 dark:border-blue-700 rounded-lg 
+                                                          transition-transform duration-200 group-hover:scale-105">
+                                                    <div className="text-blue-600 dark:text-blue-400 text-xs mb-0.5">☕</div>
+                                                    <div className="text-[10px] font-bold text-blue-800 dark:text-blue-300">
+                                                        {formatHora(horario.break_1)}
+                                                    </div>
+                                                    <div className="text-[8px] text-gray-600 dark:text-gray-400 mt-0.5 font-medium">
+                                                        Break 1
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {horario.colacion && (
+                                                <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/25 dark:to-orange-800/25 
+                                                          border border-orange-200 dark:border-orange-700 rounded-lg
+                                                          transition-transform duration-200 group-hover:scale-105">
+                                                    <div className="text-orange-600 dark:text-orange-400 text-xs mb-0.5">🍽️</div>
+                                                    <div className="text-[10px] font-bold text-orange-800 dark:text-orange-300">
+                                                        {formatHora(horario.colacion)}
+                                                    </div>
+                                                    <div className="text-[8px] text-gray-600 dark:text-gray-400 mt-0.5 font-medium">
+                                                        Colación
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {horario.break_2 && (
+                                                <div className="bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-900/25 dark:to-teal-800/25 
+                                                          border border-teal-200 dark:border-teal-700 rounded-lg 
+                                                          transition-transform duration-200 group-hover:scale-105">
+                                                    <div className="text-teal-600 dark:text-teal-400 text-xs mb-0.5">☕</div>
+                                                    <div className="text-[10px] font-bold text-teal-800 dark:text-teal-300">
+                                                        {formatHora(horario.break_2)}
+                                                    </div>
+                                                    <div className="text-[8px] text-gray-600 dark:text-gray-400 mt-0.5 font-medium">
+                                                        Break 2
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    ) : diaLibre ? (
+                        // Día libre - Centrado con margen
+                        <div className="flex flex-col items-center justify-center w-full ml-6">
+                            <div className="text-amber-600 dark:text-amber-400 text-base mb-0.5">🕊️</div>
+                            <div className="text-sm font-bold text-amber-700 dark:text-amber-400">Día Libre</div>
+                            <div className="text-[9px] text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                                Sin horario asignado
                             </div>
-                        </div>
-                    ) : tieneHorario ? (
-                        <div className="flex flex-col items-center justify-center h-full pt-3">
-                            <span className="text-emerald-600 dark:text-emerald-400 text-sm font-medium">Libre</span>
-                            <span className="text-[10px] text-gray-500 dark:text-gray-500 mt-0.5">Sin horario</span>
                         </div>
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-full pt-3">
-                            <span className="text-gray-400 dark:text-gray-600 text-xs">Sin registro</span>
+                        // Sin registro
+                        <div className="w-full text-center ml-6">
+                            <span className="text-gray-400/70 dark:text-gray-600/70 text-sm">— Sin registro —</span>
                         </div>
                     )}
                 </div>
@@ -227,7 +290,7 @@ export default function HorariosUsuariosPage() {
                                                 horario={getHorarioDelDia(horariosNormalizados, fecha, normalizarFecha)}
                                             />
                                         ) : (
-                                            <div className="p-2 min-h-[85px] border border-gray-200 dark:border-gray-700/30 bg-gray-50 dark:bg-gray-800/30 rounded-lg"></div>
+                                            <div className="p-2 min-h-[100px] border border-gray-200 dark:border-gray-700/30 bg-gray-50 dark:bg-gray-800/30 rounded-lg"></div>
                                         )}
                                     </div>
                                 ))}
@@ -240,10 +303,10 @@ export default function HorariosUsuariosPage() {
                     <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
                         <div className="flex items-center gap-1.5">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                            <span>Horario asignado</span>
+                            <span>Horario normal</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 bg-emerald-300 rounded-full"></div>
+                            <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
                             <span>Día libre</span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -253,14 +316,6 @@ export default function HorariosUsuariosPage() {
                         <div className="flex items-center gap-1.5">
                             <div className="w-2 h-2 bg-violet-600 rounded-full ring-1 ring-violet-500/50"></div>
                             <span>Hoy</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-emerald-500 text-xs">⏰</span>
-                            <span>Entrada</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-emerald-400 text-xs">🚪</span>
-                            <span>Salida</span>
                         </div>
                     </div>
                 </div>
@@ -318,17 +373,19 @@ export default function HorariosUsuariosPage() {
                             const horario = getHorarioDelDia(horariosNormalizados, fecha, normalizarFecha);
                             const hoy = esHoy(fecha);
                             const finDeSemana = esFinDeSemana(fecha);
+                            const diaLibre = esDiaLibre(horario);
                             const diaSemanaNombre = diasSemana[fecha.getDay()];
 
                             return (
                                 <div
                                     key={index}
                                     className={`
-                                        border border-gray-200 dark:border-gray-700 rounded-lg p-3
-                                        ${finDeSemana ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:bg-gray-800/50'}
-                                        ${!horario?.hora_entrada && horario ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''}
-                                        ${hoy ? 'ring-2 ring-violet-500/50' : ''}
-                                        shadow-sm
+                                        border rounded-lg p-3 min-h-[180px]
+                                        ${hoy ? 'ring-2 ring-violet-500/50 bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-700' :
+                                            diaLibre ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700' :
+                                                finDeSemana ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700' :
+                                                    'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'}
+                                        shadow-sm flex flex-col
                                     `}
                                 >
                                     <div className="text-center mb-3">
@@ -336,7 +393,8 @@ export default function HorariosUsuariosPage() {
                                         <div className={`
                                             text-lg font-semibold
                                             ${hoy ? 'text-violet-600 dark:text-violet-400' :
-                                                finDeSemana ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-100'}
+                                                diaLibre ? 'text-amber-600 dark:text-amber-400' :
+                                                    finDeSemana ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-100'}
                                         `}>
                                             {fecha.getDate()}
                                             {hoy && (
@@ -345,73 +403,84 @@ export default function HorariosUsuariosPage() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        {horario?.hora_entrada ? (
-                                            <>
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/30 p-2 rounded">
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="text-xs text-emerald-500">⏰</span>
-                                                            <span className="text-xs text-gray-700 dark:text-gray-300">Entrada:</span>
+                                    <div className="flex-grow flex flex-col">
+                                        {horario?.hora_entrada && horario.hora_entrada !== "Libre" ? (
+                                            <div className="space-y-2.5">
+                                                {/* Ingreso */}
+                                                <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/30 p-2 rounded">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-xs text-emerald-500">⏰</span>
+                                                        <span className="text-xs text-gray-700 dark:text-gray-300">Ingreso:</span>
+                                                    </div>
+                                                    <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                                                        {formatHora(horario.hora_entrada)}
+                                                    </span>
+                                                </div>
+
+                                                {/* Break 1 */}
+                                                {horario.break_1 && (
+                                                    <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs text-blue-500">☕</span>
+                                                            <span className="text-xs text-gray-700 dark:text-gray-300">Break:</span>
                                                         </div>
-                                                        <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                                                            {formatHora(horario.hora_entrada)}
+                                                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                                            {formatHora(horario.break_1)}
                                                         </span>
                                                     </div>
+                                                )}
 
-                                                    {horario.hora_salida && (
-                                                        <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/30 p-2 rounded">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="text-xs text-emerald-400">🚪</span>
-                                                                <span className="text-xs text-gray-700 dark:text-gray-300">Salida:</span>
-                                                            </div>
-                                                            <span className="text-sm font-medium text-emerald-500 dark:text-emerald-400">
-                                                                {formatHora(horario.hora_salida)}
-                                                            </span>
+                                                {/* Colación */}
+                                                {horario.colacion && (
+                                                    <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 p-2 rounded">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs text-orange-500">🍽️</span>
+                                                            <span className="text-xs text-gray-700 dark:text-gray-300">Colación:</span>
                                                         </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="pt-2 border-t border-gray-100 dark:border-gray-700/50">
-                                                    <div className="space-y-1.5">
-                                                        {horario.break_1 && (
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs text-gray-600 dark:text-gray-400">Break 1:</span>
-                                                                <span className="text-xs text-gray-700 dark:text-gray-300">
-                                                                    {formatHora(horario.break_1)}
-                                                                </span>
-                                                            </div>
-                                                        )}
-
-                                                        {horario.colacion && (
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs text-gray-600 dark:text-gray-400">Colación:</span>
-                                                                <span className="text-xs text-gray-700 dark:text-gray-300">
-                                                                    {formatHora(horario.colacion)}
-                                                                </span>
-                                                            </div>
-                                                        )}
-
-                                                        {horario.break_2 && (
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs text-gray-600 dark:text-gray-400">Break 2:</span>
-                                                                <span className="text-xs text-gray-700 dark:text-gray-300">
-                                                                    {formatHora(horario.break_2)}
-                                                                </span>
-                                                            </div>
-                                                        )}
+                                                        <span className="text-sm font-medium text-orange-600 dark:text-orange-400">
+                                                            {formatHora(horario.colacion)}
+                                                        </span>
                                                     </div>
+                                                )}
+
+                                                {/* Break 2 */}
+                                                {horario.break_2 && (
+                                                    <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs text-blue-500">☕</span>
+                                                            <span className="text-xs text-gray-700 dark:text-gray-300">Break 2:</span>
+                                                        </div>
+                                                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                                            {formatHora(horario.break_2)}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Salida */}
+                                                {horario.hora_salida && (
+                                                    <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/30 p-2 rounded border-t border-emerald-100 dark:border-emerald-800 mt-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs text-emerald-400">🚪</span>
+                                                            <span className="text-xs text-gray-700 dark:text-gray-300">Salida:</span>
+                                                        </div>
+                                                        <span className="text-sm font-medium text-emerald-500 dark:text-emerald-400">
+                                                            {formatHora(horario.hora_salida)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : diaLibre ? (
+                                            // Día libre en vista semanal
+                                            <div className="flex-grow flex flex-col items-center justify-center">
+                                                <div className="text-amber-600 dark:text-amber-400 font-medium text-sm mb-1">Día Libre</div>
+                                                <div className="text-[10px] text-amber-500 dark:text-amber-400/70 bg-amber-100 dark:bg-amber-900/30 px-2 py-1 rounded-full">
+                                                    Descanso programado
                                                 </div>
-                                            </>
-                                        ) : horario ? (
-                                            // Día libre
-                                            <div className="text-center py-4">
-                                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Libre</span>
                                             </div>
                                         ) : (
                                             // Sin registro
-                                            <div className="text-center py-4">
-                                                <span className="text-gray-400 dark:text-gray-600 text-sm">Sin registro</span>
+                                            <div className="flex-grow flex items-center justify-center">
+                                                <span className="text-gray-400 dark:text-gray-600 text-sm">-</span>
                                             </div>
                                         )}
                                     </div>
@@ -424,7 +493,7 @@ export default function HorariosUsuariosPage() {
         );
     };
 
-    // Estados de carga y error - CON DISEÑO ACTUALIZADO
+    // Estados de carga y error
     if (loading) {
         return (
             <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen flex items-center justify-center">
@@ -465,7 +534,7 @@ export default function HorariosUsuariosPage() {
 
     return (
         <div className="p-4 md:p-6 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 min-h-screen">
-            {/* Controles - CON DISEÑO ACTUALIZADO */}
+            {/* Controles */}
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-xl md:text-2xl font-semibold text-gray-900 dark:text-gray-100">Calendario de Horarios</h1>
@@ -477,7 +546,7 @@ export default function HorariosUsuariosPage() {
                         <span className="text-violet-600 dark:text-violet-400">{usuarios.length} usuarios</span>
                         <span className="mx-2">•</span>
                         <span className="text-gray-700 dark:text-gray-300">
-                            {vista === 'mes' ? 'Vista mensual completa' : 'Vista semanal'}
+                            {vista === 'mes' ? 'Vista mensual' : 'Vista semanal'}
                         </span>
                     </p>
                 </div>
@@ -578,12 +647,12 @@ export default function HorariosUsuariosPage() {
                 </div>
             )}
 
-            {/* Pie de página - CON DISEÑO ACTUALIZADO */}
+            {/* Pie de página */}
             <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-800 text-center text-sm text-gray-600 dark:text-gray-500">
                 <div className="mb-2">
                     <span className="font-medium text-gray-700 dark:text-gray-300">Sistema de Calendario de Horarios</span>
                     <span className="mx-2">•</span>
-                    <span>{vista === 'mes' ? 'Vista de calendario mensual completa' : 'Vista semanal detallada'}</span>
+                    <span>{vista === 'mes' ? 'Vista de calendario mensual' : 'Vista semanal detallada'}</span>
                 </div>
                 <div className="flex flex-wrap justify-center gap-3 text-xs">
                     <span>👥 Total usuarios: <span className="text-violet-600 dark:text-violet-400 font-medium">{usuarios.length}</span></span>
