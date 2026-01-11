@@ -49,7 +49,7 @@ export const TIPOS_JORNADA = [
 // Fechas
 export const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 export const MESES_ABR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-export const DIAS_SEMANA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+export const DIAS_SEMANA = [ "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb","Dom"];
 
 // Fechas globales
 export const HOY = new Date();

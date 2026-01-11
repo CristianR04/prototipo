@@ -42,6 +42,14 @@ interface TablaHorariosUIProps {
   onGenerarMalla5x2: (params: { fecha_inicio: string; fecha_fin: string; employeeids?: string[] }) => void;
   onRevertirCambios: () => void;
   onRecargarUsuarios: () => void;
+
+    festivos: Array<{ // NUEVO
+    fecha: string;
+    nombre: string;
+    pais: 'chile' | 'colombia' | 'ambos';
+    nacional?: boolean;
+    observaciones?: string;
+  }>;
 }
 
 const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
@@ -252,93 +260,6 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
       ))}
     </div>
   );
-
-  const renderPanelAcciones = () => (
-    <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-800">
-      <div className="space-y-4">
-        {/* Mensajes del sistema */}
-        {mensaje && (
-          <div className={`p-4 rounded-lg border ${
-            mensaje.tipo === 'success' 
-              ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-              : mensaje.tipo === 'error'
-              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
-              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300'
-          }`}>
-            <div className="flex items-center gap-3">
-              <span className="text-lg">
-                {mensaje.tipo === 'success' ? '✅' : 
-                 mensaje.tipo === 'error' ? '❌' : 'ℹ️'}
-              </span>
-              <span className="font-medium">{mensaje.texto}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Botones de gestión */}
-            <button
-              onClick={onGuardarHorarios}
-              disabled={cambiosPendientes === 0 || isLoading}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                cambiosPendientes > 0 && !isLoading
-                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-              }`}
-            >
-              💾 Guardar Cambios
-              {cambiosPendientes > 0 && (
-                <span className="bg-white/20 px-2 py-0.5 rounded text-xs">
-                  {cambiosPendientes}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={onRevertirCambios}
-              disabled={cambiosPendientes === 0 || isLoading}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                cambiosPendientes > 0 && !isLoading
-                  ? "bg-amber-600 text-white hover:bg-amber-700"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-              }`}
-            >
-              ↩️ Revertir
-            </button>
-
-            <button
-              onClick={onRecargarUsuarios}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
-            >
-              🔄 Recargar
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Botones de generación */}
-            <button
-              onClick={() => onGenerarHorariosAutomaticos(2)}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-colors flex items-center gap-2"
-            >
-              ⚡ Generar 2 Meses
-            </button>
-
-            <button
-              onClick={() => setMostrarGenerador5x2(true)}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors flex items-center gap-2"
-            >
-              🗓️ Malla 5x2
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   const renderModalGenerador5x2 = () => {
     if (!mostrarGenerador5x2) return null;
 
@@ -458,9 +379,6 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
 
   return (
     <>
-      {/* Panel de acciones */}
-      {renderPanelAcciones()}
-
       {/* Panel de navegación */}
       <div className="mb-6 p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="space-y-4">

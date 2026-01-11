@@ -32,11 +32,19 @@ export const useTablaHorarios = () => {
   const [horariosOriginales, setHorariosOriginales] = useState<Record<string, HorarioCompleto>>({});
   const [horasEntrada, setHorasEntrada] = useState<Record<string, string>>({});
   const [tiposJornada, setTiposJornada] = useState<Record<string, TipoJornada>>({});
+  const [festivos, setFestivos] = useState<Array<{
+    fecha: string;
+    nombre: string;
+    pais: 'chile' | 'colombia' | 'ambos';
+    nacional?: boolean;
+    observaciones?: string;
+  }>>([]);
 
   // ==================== ESTADOS DE UI ====================
   const [isHydrated, setIsHydrated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingUsuarios, setIsLoadingUsuarios] = useState(true);
+  const [isLoadingFestivos, setIsLoadingFestivos] = useState(false);
   const [mensaje, setMensaje] = useState<MensajeUI | null>(null);
   const [modoSeleccion, setModoSeleccion] = useState<ModoSeleccion | null>(null);
   const [celdasSeleccionadas, setCeldasSeleccionadas] = useState<CeldaSeleccionada[]>([]);
@@ -64,6 +72,108 @@ export const useTablaHorarios = () => {
     return data;
   }, []);
 
+  // ==================== CARGA DE FESTIVOS ====================
+  const cargarFestivos = useCallback(async () => {
+    try {
+      setIsLoadingFestivos(true);
+      const año = configFechas.año;
+
+      console.log(`📅 Cargando festivos para el año ${año}...`);
+
+      // Cargar festivos de ambos países
+      const [resChile, resColombia] = await Promise.all([
+        fetch(`/Horarios/api/festivos?pais=Chile&año=${año}`),
+        fetch(`/Horarios/api/festivos?pais=Colombia&año=${año}`)
+      ]);
+
+      const dataChile = await resChile.json();
+      const dataColombia = await resColombia.json();
+
+      console.log('🎯 Festivos Chile:', dataChile);
+      console.log('🎯 Festivos Colombia:', dataColombia);
+
+      // Crear array para combinar festivos
+      const festivosCombinados: Array<{
+        fecha: string;
+        nombre: string;
+        pais: 'chile' | 'colombia' | 'ambos';
+        nacional?: boolean;
+        observaciones?: string;
+      }> = [];
+
+      // Mapa para agrupar por fecha
+      const festivosPorFecha: Record<string, {
+        fecha: string;
+        nombres: string[];
+        paises: ('chile' | 'colombia' | 'ambos')[];
+      }> = {};
+
+      // Procesar festivos de Chile
+      if (dataChile.success && dataChile.festivos) {
+        dataChile.festivos.forEach((f: any) => {
+          const fecha = f.fecha;
+          if (!festivosPorFecha[fecha]) {
+            festivosPorFecha[fecha] = {
+              fecha,
+              nombres: [],
+              paises: []
+            };
+          }
+          festivosPorFecha[fecha].nombres.push(f.descripcion);
+          if (!festivosPorFecha[fecha].paises.includes('chile')) {
+            festivosPorFecha[fecha].paises.push('chile');
+          }
+        });
+      }
+
+      // Procesar festivos de Colombia
+      if (dataColombia.success && dataColombia.festivos) {
+        dataColombia.festivos.forEach((f: any) => {
+          const fecha = f.fecha;
+          if (!festivosPorFecha[fecha]) {
+            festivosPorFecha[fecha] = {
+              fecha,
+              nombres: [],
+              paises: []
+            };
+          }
+          festivosPorFecha[fecha].nombres.push(f.descripcion);
+          if (!festivosPorFecha[fecha].paises.includes('colombia')) {
+            festivosPorFecha[fecha].paises.push('colombia');
+          }
+        });
+      }
+
+      // Convertir a formato para la tabla
+      Object.values(festivosPorFecha).forEach(item => {
+        let pais: 'chile' | 'colombia' | 'ambos' = 'chile';
+        if (item.paises.includes('chile') && item.paises.includes('colombia')) {
+          pais = 'ambos';
+        } else if (item.paises.includes('colombia')) {
+          pais = 'colombia';
+        }
+
+        festivosCombinados.push({
+          fecha: item.fecha,
+          nombre: item.nombres[0] || 'Festivo',
+          pais,
+          nacional: true,
+          observaciones: item.nombres.length > 1 ?
+            `También: ${item.nombres.slice(1).join(', ')}` : undefined
+        });
+      });
+
+      console.log(`✅ Festivos combinados: ${festivosCombinados.length}`);
+      setFestivos(festivosCombinados);
+
+    } catch (error: any) {
+      console.error("❌ Error cargando festivos:", error);
+      setFestivos([]);
+    } finally {
+      setIsLoadingFestivos(false);
+    }
+  }, [configFechas.año]);
+
   // ==================== CARGA DE USUARIOS ====================
   const cargarUsuarios = useCallback(async () => {
     try {
@@ -88,6 +198,8 @@ export const useTablaHorarios = () => {
       const fechaFin = fechas[fechas.length - 1].fullDate;
       const url = `/Horarios/api/horario?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
 
+      console.log(`📥 Cargando horarios del ${fechaInicio} al ${fechaFin}`);
+
       const data = await fetchAPI<{ success: boolean; horarios: any[] }>(url);
 
       // Inicializar estructuras
@@ -95,9 +207,12 @@ export const useTablaHorarios = () => {
       const horasEntradaTemp: Record<string, string> = {};
       const tiposJornadaTemp: Record<string, TipoJornada> = {};
 
+      // Primero inicializar todo como "Libre"
       usuarios.forEach(usuario => {
         fechas.forEach(fecha => {
           const key = `${usuario.employeeid}-${fecha.fullDate}`;
+
+          // Inicializar con valores por defecto
           horariosTemp[key] = {
             employeeid: usuario.employeeid,
             fecha: fecha.fullDate,
@@ -108,46 +223,65 @@ export const useTablaHorarios = () => {
             break_2: null,
             tipo_jornada: "normal" as TipoJornada
           };
+
           horasEntradaTemp[key] = "Libre";
           tiposJornadaTemp[key] = "normal" as TipoJornada;
         });
       });
 
-      // Llenar con datos existentes
-      data.horarios?.forEach((registro: any) => {
-        const key = `${registro.employeeid}-${registro.fecha}`;
-        if (horariosTemp[key]) {
-          const tipoJornada: TipoJornada =
-            ["normal", "entrada_tardia", "salida_temprana", "apertura", "cierre"].includes(registro.tipo_jornada)
-              ? registro.tipo_jornada as TipoJornada
-              : "normal" as TipoJornada;
+      // Llenar con datos existentes de la API
+      if (data.horarios && data.horarios.length > 0) {
+        console.log(`✅ ${data.horarios.length} horarios cargados de la API`);
 
-          horariosTemp[key] = {
-            ...horariosTemp[key],
-            hora_entrada: registro.hora_entrada || null,
-            hora_salida: registro.hora_salida || null,
-            break_1: registro.break_1 || null,
-            colacion: registro.colacion || null,
-            break_2: registro.break_2 || null,
-            tipo_jornada: tipoJornada
-          };
+        data.horarios.forEach((registro: any) => {
+          const key = `${registro.employeeid}-${registro.fecha}`;
 
-          horasEntradaTemp[key] = registro.hora_entrada
-            ? registro.hora_entrada.substring(0, 5)
-            : "Libre";
-          tiposJornadaTemp[key] = tipoJornada;
-        }
-      });
+          if (horariosTemp[key]) {
+            const tipoJornada: TipoJornada =
+              ["normal", "entrada_tardia", "salida_temprana", "apertura", "cierre"]
+                .includes(registro.tipo_jornada)
+                ? registro.tipo_jornada as TipoJornada
+                : "normal";
 
+            horariosTemp[key] = {
+              ...horariosTemp[key],
+              hora_entrada: registro.hora_entrada || null,
+              hora_salida: registro.hora_salida || null,
+              break_1: registro.break_1 || null,
+              colacion: registro.colacion || null,
+              break_2: registro.break_2 || null,
+              tipo_jornada: tipoJornada
+            };
+
+            horasEntradaTemp[key] = registro.hora_entrada
+              ? registro.hora_entrada.substring(0, 5)
+              : "Libre";
+
+            tiposJornadaTemp[key] = tipoJornada;
+          }
+        });
+      } else {
+        console.log('ℹ️ No hay horarios existentes para este rango');
+      }
+
+      // Actualizar estados
       setHorarios(horariosTemp);
       setHorariosOriginales(JSON.parse(JSON.stringify(horariosTemp)));
       setHorasEntrada(horasEntradaTemp);
       setTiposJornada(tiposJornadaTemp);
+
+      // Marcar como hidratado después de cargar
       setIsHydrated(true);
 
     } catch (error: any) {
       console.error("❌ Error cargando horarios:", error);
-      setMensaje({ tipo: "error", texto: `Error al cargar horarios: ${error.message}` });
+      setMensaje({
+        tipo: "error",
+        texto: `Error al cargar horarios: ${error.message}`
+      });
+
+      // Aún así marcar como hidratado para evitar bucles
+      setIsHydrated(true);
     }
   }, [usuarios, fechas, fetchAPI]);
 
@@ -215,9 +349,8 @@ export const useTablaHorarios = () => {
     });
 
     try {
-      // Usamos POST en lugar de PUT con tipo='5x2'
       const response = await fetch('/Horarios/api/horario', {
-        method: 'POST', // Cambiado a POST
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -639,13 +772,16 @@ export const useTablaHorarios = () => {
   useEffect(() => {
     const nuevasFechas = dateCalculations.generarFechasPorVista(configFechas);
     setFechas(nuevasFechas);
-  }, [configFechas]);
+    cargarFestivos();
+  }, [configFechas, cargarFestivos]);
 
+  // FIX: Este useEffect debe cargar horarios siempre que usuarios o fechas cambien
   useEffect(() => {
-    if (usuarios.length > 0 && fechas.length > 0 && isHydrated) {
+    if (usuarios.length > 0 && fechas.length > 0) {
+      // IMPORTANTE: No verificar isHydrated aquí
       cargarHorarios();
     }
-  }, [usuarios, fechas, isHydrated, cargarHorarios]);
+  }, [usuarios, fechas, cargarHorarios]); // Eliminado isHydrated de las dependencias
 
   // ==================== RETORNO DEL HOOK ====================
   return {
@@ -656,9 +792,11 @@ export const useTablaHorarios = () => {
     horariosOriginales,
     horasEntrada,
     tiposJornada,
+    festivos,
     isHydrated,
     isLoading,
     isLoadingUsuarios,
+    isLoadingFestivos,
     mensaje,
     modoSeleccion,
     celdasSeleccionadas,
@@ -679,6 +817,7 @@ export const useTablaHorarios = () => {
     guardarHorarios,
     generarHorariosAutomaticos,
     generarMalla5x2,
+    cargarFestivos,
 
     // Funciones de cambio
     cambiarTipoJornada,

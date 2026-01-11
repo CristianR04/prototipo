@@ -10,9 +10,9 @@ import ConfiguracionCompacta from "./ConfiguracionCompacta";
 
 
 // Componente para generación automática
-const GeneradorAutomatico = ({ onGenerar, isLoading }: { 
-  onGenerar: (meses: number) => Promise<void>; 
-  isLoading: boolean 
+const GeneradorAutomatico = ({ onGenerar, isLoading }: {
+  onGenerar: (meses: number) => Promise<void>;
+  isLoading: boolean
 }) => {
   const [meses, setMeses] = React.useState(2);
 
@@ -45,7 +45,7 @@ const GeneradorAutomatico = ({ onGenerar, isLoading }: {
             Genera horarios automáticamente para los próximos {meses} meses (hasta {calcularFechaFin()})
           </p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <label className="text-sm text-gray-700 dark:text-gray-300">Meses:</label>
@@ -60,15 +60,14 @@ const GeneradorAutomatico = ({ onGenerar, isLoading }: {
               <option value={3}>3 meses</option>
             </select>
           </div>
-          
+
           <button
             onClick={handleGenerar}
             disabled={isLoading}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-              isLoading
-                ? 'bg-gray-300 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 text-white shadow-sm'
-            }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${isLoading
+              ? 'bg-gray-300 cursor-not-allowed'
+              : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 text-white shadow-sm'
+              }`}
           >
             {isLoading ? (
               <>
@@ -81,7 +80,7 @@ const GeneradorAutomatico = ({ onGenerar, isLoading }: {
           </button>
         </div>
       </div>
-      
+
       <div className="mt-3 p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg text-sm">
         <p className="font-medium text-gray-700 dark:text-gray-300 mb-1">Características:</p>
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-1 text-gray-600 dark:text-gray-400">
@@ -109,37 +108,38 @@ const GeneradorAutomatico = ({ onGenerar, isLoading }: {
 
 export default function HorariosMain() {
   const {
-    // Estados
+    // Estados - AGREGAR festivos
     usuarios,
     fechas,
     horarios,
     horariosOriginales,
     horasEntrada,
     tiposJornada,
+    festivos, // ← AGREGAR ESTO
     isLoading,
     isLoadingUsuarios,
     mensaje,
     modoSeleccion,
     celdasSeleccionadas,
     configFechas,
-    
+
     // Valores calculados
     cambiosPendientes,
     todasCeldasSeleccionadas,
     textoRangoFechas,
     textoSemana,
-    
+
     // Setters
     setMensaje,
-    
+
     // Funciones de API
     guardarHorarios,
     generarHorariosAutomaticos,
-    
+
     // Funciones de cambio
     cambiarTipoJornada,
     cambiarHoraEntrada,
-    
+
     // Funciones de selección
     limpiarSeleccion,
     handleMouseDownCelda,
@@ -150,11 +150,11 @@ export default function HorariosMain() {
     toggleSeleccionColumna,
     toggleModoSeleccion,
     estaSeleccionada,
-    
+
     // Funciones globales
     aplicarTipoJornadaGlobal,
     aplicarHoraGlobal,
-    
+
     // Funciones de fechas
     cambiarVista,
     cambiarAño,
@@ -163,11 +163,11 @@ export default function HorariosMain() {
     cambiarAñoNavigation,
     seleccionarMesActual,
     seleccionarSemanaActual,
-    
+
     // Funciones principales
     handleRevertir,
     handleRecargarUsuarios,
-    
+
     // Constantes
     HORAS_OPCIONES,
     TIPOS_JORNADA,
@@ -232,11 +232,10 @@ export default function HorariosMain() {
           </button>
 
           {modoSeleccion && celdasSeleccionadas.length > 0 && (
-            <div className={`px-3 py-1.5 border rounded-lg text-sm ${
-              modoSeleccion === "rango" 
-                ? "border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20" 
-                : "border-purple-400 text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20"
-            }`}>
+            <div className={`px-3 py-1.5 border rounded-lg text-sm ${modoSeleccion === "rango"
+              ? "border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20"
+              : "border-purple-400 text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20"
+              }`}>
               {celdasSeleccionadas.length} seleccionadas
             </div>
           )}
@@ -250,13 +249,12 @@ export default function HorariosMain() {
 
       {/* Mensaje */}
       {mensaje && (
-        <div className={`mb-4 p-3 rounded-lg flex items-center gap-3 text-sm ${
-          mensaje.tipo === "success"
-            ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-400"
-            : mensaje.tipo === "error"
+        <div className={`mb-4 p-3 rounded-lg flex items-center gap-3 text-sm ${mensaje.tipo === "success"
+          ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-400"
+          : mensaje.tipo === "error"
             ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 text-red-700 dark:text-red-400"
             : "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 text-blue-700 dark:text-blue-400"
-        }`}>
+          }`}>
           {mensaje.tipo === "info" && (
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
           )}
@@ -270,7 +268,7 @@ export default function HorariosMain() {
       )}
 
       {/* Componente de generación automática */}
-      <GeneradorAutomatico 
+      <GeneradorAutomatico
         onGenerar={generarHorariosAutomaticos}
         isLoading={isLoading}
       />
@@ -286,6 +284,10 @@ export default function HorariosMain() {
         todasCeldasSeleccionadas={todasCeldasSeleccionadas}
         HORAS_OPCIONES={HORAS_OPCIONES}
         TIPOS_JORNADA={TIPOS_JORNADA}
+        festivos={festivos} // ← AGREGAR ESTO
+        cambiosPendientes={cambiosPendientes}
+        isLoading={isLoading}
+        mensaje={mensaje}
         onCambiarVista={cambiarVista}
         onCambiarAño={cambiarAño}
         onCambiarMes={cambiarMes}
@@ -313,6 +315,7 @@ export default function HorariosMain() {
         estaSeleccionada={estaSeleccionada}
         HORAS_OPCIONES={HORAS_OPCIONES}
         TIPOS_JORNADA={TIPOS_JORNADA}
+        festivos={festivos} // ← AGREGAR ESTO
         onCambiarTipoJornada={cambiarTipoJornada}
         onCambiarHoraEntrada={cambiarHoraEntrada}
         onMouseDownCelda={handleMouseDownCelda}
@@ -327,9 +330,8 @@ export default function HorariosMain() {
       <div className="mt-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="text-sm text-gray-600 dark:text-gray-500">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              !modoSeleccion ? "bg-violet-600" : modoSeleccion === "rango" ? "bg-amber-500" : "bg-purple-500"
-            }`}></div>
+            <div className={`w-2 h-2 rounded-full ${!modoSeleccion ? "bg-violet-600" : modoSeleccion === "rango" ? "bg-amber-500" : "bg-purple-500"
+              }`}></div>
             <span className="text-gray-700 dark:text-gray-300">
               {!modoSeleccion && "Modo edición individual"}
               {modoSeleccion === "rango" && "Modo selección por área"}
@@ -338,7 +340,7 @@ export default function HorariosMain() {
             <span className="mx-2 text-gray-400">•</span>
             <span className="text-gray-600 dark:text-gray-400">{fechas.length} días • {usuarios.length} usuarios</span>
           </div>
-          
+
           {/* Leyenda de tipos de jornada */}
           <div className="mt-2 flex flex-wrap gap-3">
             <div className="text-xs text-gray-600 dark:text-gray-500 font-medium">Tipos de jornada:</div>
@@ -348,6 +350,23 @@ export default function HorariosMain() {
                 <span className="text-xs text-gray-500 dark:text-gray-400">{tipo.label}</span>
               </div>
             ))}
+            <div className="text-xs text-gray-600 dark:text-gray-500 font-medium ml-2">Festivos:</div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-red-500/20 border border-red-500/50"></div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Fin semana</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-purple-500/20 border border-purple-500/50"></div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Ambos</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-rose-500/20 border border-rose-500/50"></div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Chile</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Colombia</span>
+            </div>
           </div>
         </div>
 
@@ -359,9 +378,8 @@ export default function HorariosMain() {
             </button>
           )}
 
-          <button onClick={guardarHorarios} disabled={isLoading || cambiosPendientes === 0} className={`px-5 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2 flex items-center gap-2 ${
-            cambiosPendientes > 0 ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-          }`}>
+          <button onClick={guardarHorarios} disabled={isLoading || cambiosPendientes === 0} className={`px-5 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2 flex items-center gap-2 ${cambiosPendientes > 0 ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+            }`}>
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
