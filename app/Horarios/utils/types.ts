@@ -7,6 +7,7 @@ export type VistaFecha = "mes" | "semana" | "anual";
 export interface Usuario {
   employeeid: string;
   nombre: string;
+  pais?: 'chile' | 'colombia'; // Agregar país
 }
 
 export interface HorarioCompleto {

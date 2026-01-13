@@ -28,6 +28,16 @@ interface ReportePais {
   total: number;
 }
 
+interface ReporteResumen {
+  total_empleados: number;
+  total_dias: number;
+  total_registros: number;
+  total_trabajando: number;
+  total_libres: number;
+  porcentaje_ocupacion: number;
+  horas_mas_comunes: Array<{hora: string, cantidad: number}>;
+}
+
 class ReporteService {
   private static instance: ReporteService;
   
@@ -50,8 +60,14 @@ class ReporteService {
             h.fecha::date as fecha,
             TO_CHAR(h.fecha, 'Dy') as dia_semana,
             COUNT(DISTINCT h.employeeid) as total_empleados,
-            COUNT(DISTINCT CASE WHEN h.hora_entrada IS NOT NULL THEN h.employeeid END) as trabajando,
-            COUNT(DISTINCT CASE WHEN h.hora_entrada IS NULL THEN h.employeeid END) as libres
+            COUNT(DISTINCT CASE 
+              WHEN h.hora_entrada IS NOT NULL 
+              THEN h.employeeid 
+            END) as trabajando,
+            COUNT(DISTINCT CASE 
+              WHEN h.hora_entrada IS NULL 
+              THEN h.employeeid 
+            END) as libres
           FROM horarios h
           WHERE h.fecha::date >= $1::date 
             AND h.fecha::date <= $2::date
@@ -96,7 +112,7 @@ class ReporteService {
         ),
         horas_agrupadas AS (
           SELECT 
-            hora_entrada as hora,
+            TO_CHAR(hora_entrada, 'HH24:MI') as hora,
             COUNT(*) as cantidad
           FROM horarios 
           WHERE fecha::date >= $1::date 
@@ -116,7 +132,7 @@ class ReporteService {
       const result = await client.query(query, [fecha_inicio, fecha_fin]);
 
       return result.rows.map((row: any) => ({
-        hora: row.hora.substring(0, 5), // Extraer solo HH:MM
+        hora: row.hora || 'N/A',
         cantidad: parseInt(row.cantidad),
         porcentaje: parseFloat(row.porcentaje) || 0
       }));
@@ -137,13 +153,22 @@ class ReporteService {
         ),
         jornadas_agrupadas AS (
           SELECT 
-            COALESCE(tipo_jornada, 'libre') as tipo_jornada,
+            CASE 
+              WHEN hora_entrada IS NULL 
+              THEN 'libre' 
+              ELSE COALESCE(tipo_jornada, 'normal') 
+            END as tipo_jornada,
             COUNT(*) as cantidad
           FROM horarios 
           WHERE fecha::date >= $1::date 
             AND fecha::date <= $2::date
-          GROUP BY tipo_jornada
-          ORDER BY tipo_jornada
+          GROUP BY 
+            CASE 
+              WHEN hora_entrada IS NULL 
+              THEN 'libre' 
+              ELSE COALESCE(tipo_jornada, 'normal') 
+            END
+          ORDER BY cantidad DESC
         )
         SELECT 
           j.tipo_jornada,
@@ -173,8 +198,14 @@ class ReporteService {
         SELECT 
           COALESCE(u.pais, 'No especificado') as pais,
           COUNT(DISTINCT h.employeeid) as total,
-          COUNT(DISTINCT CASE WHEN h.hora_entrada IS NOT NULL THEN h.employeeid END) as trabajando,
-          COUNT(DISTINCT CASE WHEN h.hora_entrada IS NULL THEN h.employeeid END) as libres
+          COUNT(DISTINCT CASE 
+            WHEN h.hora_entrada IS NOT NULL 
+            THEN h.employeeid 
+          END) as trabajando,
+          COUNT(DISTINCT CASE 
+            WHEN h.hora_entrada IS NULL 
+            THEN h.employeeid 
+          END) as libres
         FROM horarios h
         LEFT JOIN usuarios u ON h.employeeid = u.employeeid
         WHERE h.fecha::date >= $1::date 
@@ -206,15 +237,21 @@ class ReporteService {
             COUNT(DISTINCT h.employeeid) as total_empleados,
             COUNT(DISTINCT h.fecha) as total_dias,
             COUNT(*) as total_registros,
-            COUNT(CASE WHEN h.hora_entrada IS NOT NULL THEN 1 END) as total_trabajando,
-            COUNT(CASE WHEN h.hora_entrada IS NULL THEN 1 END) as total_libres
+            COUNT(CASE 
+              WHEN h.hora_entrada IS NOT NULL 
+              THEN 1 
+            END) as total_trabajando,
+            COUNT(CASE 
+              WHEN h.hora_entrada IS NULL 
+              THEN 1 
+            END) as total_libres
           FROM horarios h
           WHERE h.fecha::date >= $1::date 
             AND h.fecha::date <= $2::date
         ),
         horas_populares AS (
           SELECT 
-            hora_entrada as hora,
+            TO_CHAR(hora_entrada, 'HH24:MI') as hora,
             COUNT(*) as cantidad
           FROM horarios 
           WHERE fecha::date >= $1::date 
@@ -231,9 +268,14 @@ class ReporteService {
           d.total_trabajando,
           d.total_libres,
           ROUND((d.total_trabajando::decimal / NULLIF(d.total_registros, 0)) * 100, 2) as porcentaje_ocupacion,
-          ARRAY_AGG(JSON_BUILD_OBJECT('hora', hp.hora, 'cantidad', hp.cantidad)) as horas_mas_comunes
+          COALESCE(
+            ARRAY_AGG(
+              JSON_BUILD_OBJECT('hora', hp.hora, 'cantidad', hp.cantidad)
+            ) FILTER (WHERE hp.hora IS NOT NULL),
+            '{}'
+          ) as horas_mas_comunes
         FROM datos_generales d
-        CROSS JOIN horas_populares hp
+        LEFT JOIN horas_populares hp ON true
         GROUP BY 
           d.total_empleados,
           d.total_dias,
@@ -244,7 +286,41 @@ class ReporteService {
 
       const result = await client.query(query, [fecha_inicio, fecha_fin]);
 
-      return result.rows[0] || {};
+      return result.rows[0] || {
+        total_empleados: 0,
+        total_dias: 0,
+        total_registros: 0,
+        total_trabajando: 0,
+        total_libres: 0,
+        porcentaje_ocupacion: 0,
+        horas_mas_comunes: []
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  // Función para depuración - verifica los datos directamente
+  async obtenerDatosCrudos(fecha_inicio: string, fecha_fin: string) {
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        SELECT 
+          fecha::date as fecha,
+          employeeid,
+          hora_entrada,
+          tipo_jornada,
+          CASE WHEN hora_entrada IS NULL THEN 'SI' ELSE 'NO' END as es_libre
+        FROM horarios 
+        WHERE fecha::date >= $1::date 
+          AND fecha::date <= $2::date
+        ORDER BY fecha, employeeid
+        LIMIT 50
+      `;
+
+      const result = await client.query(query, [fecha_inicio, fecha_fin]);
+      return result.rows;
     } finally {
       client.release();
     }

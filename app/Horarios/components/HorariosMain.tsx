@@ -165,6 +165,9 @@ export default function HorariosMain() {
 
     // Constantes
     HORAS_OPCIONES,
+    HORAS_CHILE,
+    HORAS_COLOMBIA,
+    HORAS_DEFAULT,
     AÑOS_DISPONIBLES
   } = useTablaHorarios();
 
@@ -305,6 +308,9 @@ export default function HorariosMain() {
         celdasSeleccionadas={celdasSeleccionadas}
         estaSeleccionada={estaSeleccionada}
         HORAS_OPCIONES={HORAS_OPCIONES}
+        HORAS_CHILE={HORAS_CHILE}
+        HORAS_COLOMBIA={HORAS_COLOMBIA}
+        HORAS_DEFAULT={HORAS_DEFAULT}
         festivos={festivos}
         onCambiarHoraEntrada={cambiarHoraEntrada}
         onMouseDownCelda={handleMouseDownCelda}

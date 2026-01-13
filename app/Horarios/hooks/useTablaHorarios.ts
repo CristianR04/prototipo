@@ -1,3 +1,4 @@
+// app/Horarios/hooks/useTablaHorarios.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Usuario,
@@ -14,7 +15,10 @@ import {
   HOY,
   AÑO_ACTUAL,
   AÑOS_DISPONIBLES,
-  HORAS_OPCIONES
+  HORAS_OPCIONES,
+  HORAS_CHILE,
+  HORAS_COLOMBIA,
+  HORAS_DEFAULT
 } from '../utils/constants';
 import {
   dateCalculations,
@@ -765,6 +769,9 @@ export const useTablaHorarios = () => {
 
     // Constantes
     HORAS_OPCIONES,
+    HORAS_CHILE,
+    HORAS_COLOMBIA,
+    HORAS_DEFAULT,
     AÑOS_DISPONIBLES
   };
 };

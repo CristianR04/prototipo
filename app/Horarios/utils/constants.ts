@@ -1,16 +1,56 @@
 // app/Horarios/utils/constants.ts
 import { TipoJornada } from './types';
 
-// Horas disponibles (5:00 a 10:30)
-export const HORAS_OPCIONES: string[] = (() => {
-  const opciones = ["Libre"];
-  for (let i = 0; i < 12; i++) {
-    const horaBase = 5 + Math.floor(i / 2);
-    const minutos = i % 2 === 0 ? "00" : "30";
-    opciones.push(`${horaBase.toString().padStart(2, "0")}:${minutos}`);
+// Configuración de horarios por país
+export interface ConfigHorarioPais {
+  horaMinima: number; // Hora mínima de entrada (ej: 5)
+  horaMaxima: number; // Hora máxima de entrada (ej: 10 para Colombia, 12 para Chile)
+  intervalos: 30 | 60; // Intervalos en minutos
+}
+
+export const HORARIOS_POR_PAIS: Record<string, ConfigHorarioPais> = {
+  chile: {
+    horaMinima: 5,
+    horaMaxima: 12, // Chile: horarios hasta las 12:00
+    intervalos: 30
+  },
+  colombia: {
+    horaMinima: 5,
+    horaMaxima: 10, // Colombia: horarios hasta las 10:30
+    intervalos: 30
   }
+};
+
+// Función para generar horas según país
+export const generarHorasParaPais = (pais: string): string[] => {
+  const config = HORARIOS_POR_PAIS[pais] || HORARIOS_POR_PAIS.chile;
+  const opciones = ["Libre"];
+  
+  for (let hora = config.horaMinima; hora <= config.horaMaxima; hora++) {
+    for (let minuto = 0; minuto < 60; minuto += config.intervalos) {
+      // Para la hora máxima, solo permitir hora:00
+      if (hora === config.horaMaxima && minuto > 0) continue;
+      
+      const horaStr = hora.toString().padStart(2, "0");
+      const minutoStr = minuto.toString().padStart(2, "0");
+      opciones.push(`${horaStr}:${minutoStr}`);
+    }
+  }
+  
   return opciones;
-})();
+};
+
+// Horas para Chile (todas las disponibles)
+export const HORAS_CHILE: string[] = generarHorasParaPais('chile');
+
+// Horas para Colombia (hasta las 10:30)
+export const HORAS_COLOMBIA: string[] = generarHorasParaPais('colombia');
+
+// Horas por defecto (para cuando no se conoce el país)
+export const HORAS_DEFAULT: string[] = HORAS_CHILE;
+
+// Alias para compatibilidad
+export const HORAS_OPCIONES = HORAS_DEFAULT;
 
 // Tipos de jornada
 export const TIPOS_JORNADA = [
@@ -49,7 +89,7 @@ export const TIPOS_JORNADA = [
 // Fechas
 export const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 export const MESES_ABR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-export const DIAS_SEMANA = [ "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb","Dom"];
+export const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 // Fechas globales
 export const HOY = new Date();

@@ -1,3 +1,4 @@
+// app/Horarios/components/TableBody.tsx
 import React, { useRef } from 'react';
 import { 
   Usuario, 
@@ -21,6 +22,9 @@ interface TablaHorariosBodyProps {
   celdasSeleccionadas: CeldaSeleccionada[];
   estaSeleccionada: (employeeid: string, fecha: string) => boolean;
   HORAS_OPCIONES: string[];
+  HORAS_CHILE: string[];
+  HORAS_COLOMBIA: string[];
+  HORAS_DEFAULT: string[];
   festivos: Array<{
     fecha: string;
     nombre: string;
@@ -48,6 +52,9 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
   celdasSeleccionadas,
   estaSeleccionada,
   HORAS_OPCIONES,
+  HORAS_CHILE,
+  HORAS_COLOMBIA,
+  HORAS_DEFAULT,
   festivos = [],
   
   onCambiarHoraEntrada,
@@ -59,6 +66,19 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
   isLoading
 }) => {
   const tablaRef = useRef<HTMLDivElement>(null);
+
+  // Función para obtener horas según país del usuario
+  const obtenerHorasParaUsuario = (usuario: Usuario): string[] => {
+    const pais = usuario.pais?.toLowerCase();
+    
+    if (pais === 'chile') {
+      return HORAS_CHILE;
+    } else if (pais === 'colombia') {
+      return HORAS_COLOMBIA;
+    }
+    
+    return HORAS_DEFAULT; // O HORAS_OPCIONES para compatibilidad
+  };
 
   // Función para determinar si una fecha es festivo y para qué país
   const esFestivo = (fechaStr: string) => {
@@ -142,6 +162,20 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
     const seleccionada = estaSeleccionada(usuario.employeeid, fecha.fullDate);
     const festivo = esFestivo(fecha.fullDate);
     
+    // Obtener horas disponibles para este usuario específico
+    const horasDisponibles = obtenerHorasParaUsuario(usuario);
+    
+    // Si hay un horario en BD que no está en las opciones, agregarlo
+    let horasFinales = [...horasDisponibles];
+    if (horario?.hora_entrada && !horasFinales.includes(horario.hora_entrada.substring(0, 5))) {
+      horasFinales.push(horario.hora_entrada.substring(0, 5));
+      horasFinales.sort((a, b) => {
+        if (a === "Libre") return -1;
+        if (b === "Libre") return 1;
+        return a.localeCompare(b);
+      });
+    }
+
     const getEstiloSeleccion = () => {
       if (!seleccionada) return '';
       if (modoSeleccion === "rango") return 'ring-1 ring-amber-500/30 bg-amber-500/10';
@@ -197,17 +231,29 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
           }`}></div>
           
           <div className="relative">
-            {/* Solo Selector de hora de entrada */}
+            {/* Selector de hora de entrada con horas específicas por país */}
             <select
               value={horaEntradaActual}
               onChange={(e) => onCambiarHoraEntrada(usuario.employeeid, fecha.fullDate, e.target.value)}
               className={`${getSelectStyles(hayCambio)} ${horaEntradaActual !== "Libre" ? "text-cyan-600 dark:text-cyan-400" : "text-gray-500 dark:text-gray-400"}`}
               disabled={isLoading || modoSeleccion !== null}
             >
-              {HORAS_OPCIONES.map(h => (
+              {horasFinales.map(h => (
                 <option key={h} value={h}>{h}</option>
               ))}
             </select>
+          </div>
+          
+          {/* Indicador visual de país */}
+          <div className="absolute -top-1 -left-1">
+            <div className={`
+              w-3 h-3 rounded-full flex items-center justify-center text-[8px] font-bold
+              ${usuario.pais === 'chile' ? 'bg-rose-100 text-rose-700 border border-rose-300' : ''}
+              ${usuario.pais === 'colombia' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : ''}
+              ${!usuario.pais ? 'bg-gray-100 text-gray-700 border border-gray-300' : ''}
+            `}>
+              {usuario.pais === 'chile' ? 'CL' : usuario.pais === 'colombia' ? 'CO' : '?'}
+            </div>
           </div>
           
           {/* Indicador visual de festivo */}
@@ -225,26 +271,25 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
           {/* Información de horas calculadas (tooltip) */}
           {horaEntradaActual !== "Libre" && horario && (
             <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 rounded shadow-sm opacity-0 hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap">
-              <div className="font-medium text-gray-800 dark:text-gray-100">Horarios calculados:</div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Tipo Jornada:</span>
-                <span className="font-medium capitalize">{horario.tipo_jornada?.replace('_', ' ') || "normal"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Break 1:</span>
-                <span className="font-medium">{horario.break_1 || "-"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Colación:</span>
-                <span className="font-medium">{horario.colacion || "-"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Break 2:</span>
-                <span className="font-medium">{horario.break_2 || "-"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Salida:</span>
-                <span className="font-medium text-emerald-600 dark:text-emerald-400">{horario.hora_salida || "-"}</span>
+              <div className="font-medium text-gray-800 dark:text-gray-100 mb-1">Horarios calculados:</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div className="text-gray-500 dark:text-gray-400">País:</div>
+                <div className="font-medium capitalize">{usuario.pais || "No definido"}</div>
+                
+                <div className="text-gray-500 dark:text-gray-400">Tipo Jornada:</div>
+                <div className="font-medium capitalize">{horario.tipo_jornada?.replace('_', ' ') || "normal"}</div>
+                
+                <div className="text-gray-500 dark:text-gray-400">Break 1:</div>
+                <div className="font-medium">{horario.break_1 || "-"}</div>
+                
+                <div className="text-gray-500 dark:text-gray-400">Colación:</div>
+                <div className="font-medium">{horario.colacion || "-"}</div>
+                
+                <div className="text-gray-500 dark:text-gray-400">Break 2:</div>
+                <div className="font-medium">{horario.break_2 || "-"}</div>
+                
+                <div className="text-gray-500 dark:text-gray-400">Salida:</div>
+                <div className="font-medium text-emerald-600 dark:text-emerald-400">{horario.hora_salida || "-"}</div>
               </div>
             </div>
           )}
@@ -353,6 +398,17 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
                 <div className="flex items-center justify-between pr-2">
                   <div>
                     <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">{usuario.nombre}</div>
+                    {usuario.pais && (
+                      <div className={`text-[10px] mt-0.5 px-2 py-0.5 rounded-full inline-block ${
+                        usuario.pais === 'chile' ? 'bg-rose-100 text-rose-700' :
+                        usuario.pais === 'colombia' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {usuario.pais === 'chile' ? 'Chile (hasta 12:00)' : 
+                         usuario.pais === 'colombia' ? 'Colombia (hasta 10:30)' : 
+                         'País no definido'}
+                      </div>
+                    )}
                   </div>
                   {modoSeleccion && (
                     <button 
@@ -375,20 +431,20 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
       <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700">
         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
           <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-rose-500/20 border border-rose-500/50"></div>
+            <span>Chile (hasta 12:00)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-yellow-500/20 border border-yellow-500/50"></div>
+            <span>Colombia (hasta 10:30)</span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded bg-red-500/20 border border-red-500/50"></div>
             <span>Fin de semana</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded bg-purple-500/20 border border-purple-500/50"></div>
             <span>Festivo ambos países</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-rose-500/20 border border-rose-500/50"></div>
-            <span>Festivo solo Chile</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-yellow-500/20 border border-yellow-500/50"></div>
-            <span>Festivo solo Colombia</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded bg-violet-600"></div>
