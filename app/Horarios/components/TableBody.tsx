@@ -2,8 +2,7 @@ import React, { useRef } from 'react';
 import { 
   Usuario, 
   FechaDia, 
-  HorarioCompleto, 
-  TipoJornada,
+  HorarioCompleto,
   ModoSeleccion,
   CeldaSeleccionada 
 } from '../utils/types';
@@ -18,12 +17,10 @@ interface TablaHorariosBodyProps {
   horariosCompletos: Record<string, HorarioCompleto>;
   horariosOriginales: Record<string, HorarioCompleto>;
   horasEntrada: Record<string, string>;
-  tiposJornada: Record<string, TipoJornada>;
   modoSeleccion: ModoSeleccion | null;
   celdasSeleccionadas: CeldaSeleccionada[];
   estaSeleccionada: (employeeid: string, fecha: string) => boolean;
   HORAS_OPCIONES: string[];
-  TIPOS_JORNADA: Array<{ value: TipoJornada; label: string; color: string; desc: string }>;
   festivos: Array<{
     fecha: string;
     nombre: string;
@@ -32,7 +29,6 @@ interface TablaHorariosBodyProps {
     observaciones?: string;
   }>;
   
-  onCambiarTipoJornada: (employeeid: string, fecha: string, tipo: TipoJornada) => void;
   onCambiarHoraEntrada: (employeeid: string, fecha: string, hora: string) => void;
   onMouseDownCelda: (employeeid: string, fecha: string, e: React.MouseEvent) => void;
   onMouseEnterCelda: (employeeid: string, fecha: string) => void;
@@ -48,15 +44,12 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
   horariosCompletos,
   horariosOriginales,
   horasEntrada,
-  tiposJornada,
   modoSeleccion,
   celdasSeleccionadas,
   estaSeleccionada,
   HORAS_OPCIONES,
-  TIPOS_JORNADA,
-  festivos = [], // Asegurar que tenga un valor por defecto
+  festivos = [],
   
-  onCambiarTipoJornada,
   onCambiarHoraEntrada,
   onMouseDownCelda,
   onMouseEnterCelda,
@@ -139,7 +132,6 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
     const key = `${usuario.employeeid}-${fecha.fullDate}`;
     const horario = horariosCompletos[key];
     const horaEntradaActual = horasEntrada[key] || "Libre";
-    const tipoJornadaActual = tiposJornada[key] || "normal";
     
     const horarioOriginal = horariosOriginales[key];
     const hayCambio = horario && horarioOriginal && (
@@ -191,18 +183,10 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
       return `${baseStyles} border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 ${modeStyles}`;
     };
 
-    const getTextColor = (tipo: TipoJornada) => {
-      switch (tipo) {
-        case "normal": return "text-cyan-600 dark:text-cyan-400";
-        case "entrada_tardia": return "text-orange-600 dark:text-orange-400";
-        default: return "text-gray-600 dark:text-gray-400";
-      }
-    };
-
     return (
       <td 
         key={key} 
-        className={`p-2 ${getBackgroundColor(fecha)} transition-colors duration-150 border-l ${getBorderColor(fecha)}`}
+        className={`p-0.5 ${getBackgroundColor(fecha)} transition-colors duration-150 border-l ${getBorderColor(fecha)}`}
         onMouseDown={(e) => onMouseDownCelda(usuario.employeeid, fecha.fullDate, e)}
         onMouseEnter={() => onMouseEnterCelda(usuario.employeeid, fecha.fullDate)}
         onMouseUp={onMouseUp}
@@ -212,22 +196,8 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
             modoSeleccion ? 'cursor-pointer' : ''
           }`}></div>
           
-          <div className="relative flex flex-col gap-2">
-            {/* Selector de tipo de jornada */}
-            <select
-              value={tipoJornadaActual}
-              onChange={(e) => onCambiarTipoJornada(usuario.employeeid, fecha.fullDate, e.target.value as TipoJornada)}
-              className={`${getSelectStyles(hayCambio)} ${getTextColor(tipoJornadaActual)}`}
-              disabled={isLoading || modoSeleccion !== null}
-            >
-              {TIPOS_JORNADA.map(tipo => (
-                <option key={tipo.value} value={tipo.value} className={getTextColor(tipo.value)}>
-                  {tipo.label}
-                </option>
-              ))}
-            </select>
-            
-            {/* Selector de hora de entrada */}
+          <div className="relative">
+            {/* Solo Selector de hora de entrada */}
             <select
               value={horaEntradaActual}
               onChange={(e) => onCambiarHoraEntrada(usuario.employeeid, fecha.fullDate, e.target.value)}
@@ -256,6 +226,10 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
           {horaEntradaActual !== "Libre" && horario && (
             <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 rounded shadow-sm opacity-0 hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap">
               <div className="font-medium text-gray-800 dark:text-gray-100">Horarios calculados:</div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-500 dark:text-gray-400">Tipo Jornada:</span>
+                <span className="font-medium capitalize">{horario.tipo_jornada?.replace('_', ' ') || "normal"}</span>
+              </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-gray-500 dark:text-gray-400">Break 1:</span>
                 <span className="font-medium">{horario.break_1 || "-"}</span>
@@ -375,11 +349,10 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
         <tbody>
           {usuarios.map(usuario => (
             <tr key={usuario.employeeid} className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors duration-150 group">
-              <td className="p-3 sticky left-0 bg-white dark:bg-gray-900 z-10 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50 relative min-w-[180px]">
+              <td className="sticky left-0 bg-white dark:bg-gray-900 z-10 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-800/50 relative min-w-[180px]">
                 <div className="flex items-center justify-between pr-2">
                   <div>
                     <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">{usuario.nombre}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{usuario.employeeid}</div>
                   </div>
                   {modoSeleccion && (
                     <button 

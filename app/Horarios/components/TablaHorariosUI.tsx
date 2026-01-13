@@ -2,8 +2,7 @@
 import React, { useState } from 'react';
 import { 
   VistaFecha, 
-  ModoSeleccion, 
-  TipoJornada,
+  ModoSeleccion,
   ConfigFechas 
 } from '../utils/types';
 import { 
@@ -20,10 +19,16 @@ interface TablaHorariosUIProps {
   añosDisponibles: number[];
   todasCeldasSeleccionadas: boolean;
   HORAS_OPCIONES: string[];
-  TIPOS_JORNADA: Array<{ value: TipoJornada; label: string; color: string; desc: string }>;
   cambiosPendientes: number;
   isLoading: boolean;
   mensaje: { tipo: string; texto: string } | null;
+  festivos: Array<{
+    fecha: string;
+    nombre: string;
+    pais: 'chile' | 'colombia' | 'ambos';
+    nacional?: boolean;
+    observaciones?: string;
+  }>;
   
   onCambiarVista: (vista: VistaFecha) => void;
   onCambiarAño: (año: number) => void;
@@ -36,20 +41,6 @@ interface TablaHorariosUIProps {
   onToggleSeleccionTodo: () => void;
   onLimpiarSeleccion: () => void;
   onAplicarHoraGlobal: (hora: string) => void;
-  onAplicarTipoJornadaGlobal: (tipo: TipoJornada) => void;
-  onGuardarHorarios: () => void;
-  onGenerarHorariosAutomaticos: (meses?: number) => void;
-  onGenerarMalla5x2: (params: { fecha_inicio: string; fecha_fin: string; employeeids?: string[] }) => void;
-  onRevertirCambios: () => void;
-  onRecargarUsuarios: () => void;
-
-    festivos: Array<{ // NUEVO
-    fecha: string;
-    nombre: string;
-    pais: 'chile' | 'colombia' | 'ambos';
-    nacional?: boolean;
-    observaciones?: string;
-  }>;
 }
 
 const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
@@ -61,10 +52,10 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
   añosDisponibles,
   todasCeldasSeleccionadas,
   HORAS_OPCIONES,
-  TIPOS_JORNADA,
   cambiosPendientes,
   isLoading,
   mensaje,
+  festivos,
   
   onCambiarVista,
   onCambiarAño,
@@ -76,13 +67,7 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
   onToggleModoSeleccion,
   onToggleSeleccionTodo,
   onLimpiarSeleccion,
-  onAplicarHoraGlobal,
-  onAplicarTipoJornadaGlobal,
-  onGuardarHorarios,
-  onGenerarHorariosAutomaticos,
-  onGenerarMalla5x2,
-  onRevertirCambios,
-  onRecargarUsuarios
+  onAplicarHoraGlobal
 }) => {
   const { vista, año, mes } = configFechas;
   const [mostrarGenerador5x2, setMostrarGenerador5x2] = useState(false);
@@ -92,7 +77,7 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
 
   const renderSelectorVista = () => (
     <div className="flex gap-2">
-      {(["mes", "semana", "anual"] as VistaFecha[]).map(v => (
+      {(["mes", "semana"] as VistaFecha[]).map(v => (
         <button
           key={v}
           onClick={() => onCambiarVista(v)}
@@ -110,53 +95,11 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
   );
 
   const renderNavegacionFechas = () => {
-    if (vista === "anual") {
-      return (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onCambiarAñoNavigation("anterior")}
-            disabled={!añosDisponibles.includes(año - 1)}
-            className={`p-2 rounded-lg transition-colors ${
-              añosDisponibles.includes(año - 1)
-                ? "text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                : "text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 cursor-not-allowed"
-            }`}
-            title="Año anterior"
-          >
-            ◀
-          </button>
-          <select
-            value={año}
-            onChange={(e) => onCambiarAño(parseInt(e.target.value))}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            {añosDisponibles.map(a => (
-              <option key={a} value={a}>
-                {a} {a === año ? "(Actual)" : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => onCambiarAñoNavigation("siguiente")}
-            disabled={!añosDisponibles.includes(año + 1)}
-            className={`p-2 rounded-lg transition-colors ${
-              añosDisponibles.includes(año + 1)
-                ? "text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                : "text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 cursor-not-allowed"
-            }`}
-            title="Año siguiente"
-          >
-            ▶
-          </button>
-        </div>
-      );
-    }
-
     if (vista === "mes") {
       return (
         <div className="flex items-center gap-2">
-          <button 
-            onClick={() => onCambiarMesNavigation("anterior")} 
+          <button
+            onClick={() => onCambiarMesNavigation("anterior")}
             className="p-2 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" 
             title="Mes anterior"
           >
@@ -168,7 +111,7 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
               onChange={(e) => onCambiarAño(parseInt(e.target.value))} 
               className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
-              {añosDisponibles.map(a => <option key={a} value={a}>{a} {a === año ? "(Actual)" : ""}</option>)}
+              {añosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
             <select 
               value={mes} 
@@ -260,6 +203,7 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
       ))}
     </div>
   );
+
   const renderModalGenerador5x2 = () => {
     if (!mostrarGenerador5x2) return null;
 
@@ -335,41 +279,6 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
                   </div>
                 </div>
               )}
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  onClick={() => setMostrarGenerador5x2(false)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!fechaInicio5x2 || !fechaFin5x2) {
-                      return;
-                    }
-
-                    await onGenerarMalla5x2({
-                      fecha_inicio: fechaInicio5x2,
-                      fecha_fin: fechaFin5x2
-                    });
-                  }}
-                  disabled={isLoading}
-                  className="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                >
-                  {isLoading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Generando...
-                    </>
-                  ) : (
-                    '🚀 Generar Malla 5x2'
-                  )}
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -457,19 +366,6 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
                     <option value="Libre">Libre</option>
                     {HORAS_OPCIONES.filter(h => h !== "Libre").map(hora => (
                       <option key={hora} value={hora}>{hora}</option>
-                    ))}
-                  </select>
-                  
-                  <select 
-                    onChange={(e) => onAplicarTipoJornadaGlobal(e.target.value as TipoJornada)} 
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-w-[180px]" 
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Tipo de jornada...</option>
-                    {TIPOS_JORNADA.map(tipo => (
-                      <option key={tipo.value} value={tipo.value}>
-                        {tipo.label} ({tipo.desc})
-                      </option>
                     ))}
                   </select>
                 </div>

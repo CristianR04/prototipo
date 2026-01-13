@@ -153,7 +153,6 @@ export const dateCalculations = {
 };
 
 // ==================== CÁLCULOS DE HORAS ====================
-// SOLO UNA FUNCIÓN, ELIMINAR LA DUPLICADA
 export function calcularHorasSegunJornada(
   horaEntrada: string | null,
   tipoJornada: TipoJornada = "normal",
@@ -164,6 +163,7 @@ export function calcularHorasSegunJornada(
   break2: string | null;
   hora_salida: string | null;
 } {
+  // IMPORTANTE: Si no hay hora de entrada, retornar nulls
   if (!horaEntrada || horaEntrada === "Libre") {
     return { break1: null, colacion: null, break2: null, hora_salida: null };
   }
@@ -189,16 +189,16 @@ export function calcularHorasSegunJornada(
       };
     };
 
-    let duracion = 10; // Horas por defecto
-    
+    let duracion = 10;
+
     // Ajustar duración según tipo de jornada
     if (tipoJornada === "entrada_tardia" || tipoJornada === "salida_temprana") {
       duracion = 9;
     }
-    
+
     // Ajustar por día reducido
     if (esDiaReducido) {
-      duracion = 8; // Reducir 1 hora
+      duracion = 8;
     }
 
     let resultado;

@@ -7,8 +7,6 @@ import TablaHorariosUI from "./TablaHorariosUI";
 import TablaHorariosBody from "./TableBody";
 import ConfiguracionCompacta from "./ConfiguracionCompacta";
 
-
-
 // Componente para generación automática
 const GeneradorAutomatico = ({ onGenerar, isLoading }: {
   onGenerar: (meses: number) => Promise<void>;
@@ -108,14 +106,13 @@ const GeneradorAutomatico = ({ onGenerar, isLoading }: {
 
 export default function HorariosMain() {
   const {
-    // Estados - AGREGAR festivos
+    // Estados
     usuarios,
     fechas,
     horarios,
     horariosOriginales,
     horasEntrada,
-    tiposJornada,
-    festivos, // ← AGREGAR ESTO
+    festivos,
     isLoading,
     isLoadingUsuarios,
     mensaje,
@@ -137,7 +134,6 @@ export default function HorariosMain() {
     generarHorariosAutomaticos,
 
     // Funciones de cambio
-    cambiarTipoJornada,
     cambiarHoraEntrada,
 
     // Funciones de selección
@@ -152,7 +148,6 @@ export default function HorariosMain() {
     estaSeleccionada,
 
     // Funciones globales
-    aplicarTipoJornadaGlobal,
     aplicarHoraGlobal,
 
     // Funciones de fechas
@@ -170,7 +165,6 @@ export default function HorariosMain() {
 
     // Constantes
     HORAS_OPCIONES,
-    TIPOS_JORNADA,
     AÑOS_DISPONIBLES
   } = useTablaHorarios();
 
@@ -283,8 +277,7 @@ export default function HorariosMain() {
         añosDisponibles={AÑOS_DISPONIBLES}
         todasCeldasSeleccionadas={todasCeldasSeleccionadas}
         HORAS_OPCIONES={HORAS_OPCIONES}
-        TIPOS_JORNADA={TIPOS_JORNADA}
-        festivos={festivos} // ← AGREGAR ESTO
+        festivos={festivos}
         cambiosPendientes={cambiosPendientes}
         isLoading={isLoading}
         mensaje={mensaje}
@@ -299,7 +292,6 @@ export default function HorariosMain() {
         onToggleSeleccionTodo={toggleSeleccionTodo}
         onLimpiarSeleccion={limpiarSeleccion}
         onAplicarHoraGlobal={aplicarHoraGlobal}
-        onAplicarTipoJornadaGlobal={aplicarTipoJornadaGlobal}
       />
 
       {/* Cuerpo de la tabla */}
@@ -309,14 +301,11 @@ export default function HorariosMain() {
         horariosCompletos={horarios}
         horariosOriginales={horariosOriginales}
         horasEntrada={horasEntrada}
-        tiposJornada={tiposJornada}
         modoSeleccion={modoSeleccion}
         celdasSeleccionadas={celdasSeleccionadas}
         estaSeleccionada={estaSeleccionada}
         HORAS_OPCIONES={HORAS_OPCIONES}
-        TIPOS_JORNADA={TIPOS_JORNADA}
-        festivos={festivos} // ← AGREGAR ESTO
-        onCambiarTipoJornada={cambiarTipoJornada}
+        festivos={festivos}
         onCambiarHoraEntrada={cambiarHoraEntrada}
         onMouseDownCelda={handleMouseDownCelda}
         onMouseEnterCelda={handleMouseEnterCelda}
@@ -341,16 +330,9 @@ export default function HorariosMain() {
             <span className="text-gray-600 dark:text-gray-400">{fechas.length} días • {usuarios.length} usuarios</span>
           </div>
 
-          {/* Leyenda de tipos de jornada */}
+          {/* Leyenda simplificada */}
           <div className="mt-2 flex flex-wrap gap-3">
-            <div className="text-xs text-gray-600 dark:text-gray-500 font-medium">Tipos de jornada:</div>
-            {TIPOS_JORNADA.map(tipo => (
-              <div key={tipo.value} className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${tipo.color}`}></div>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{tipo.label}</span>
-              </div>
-            ))}
-            <div className="text-xs text-gray-600 dark:text-gray-500 font-medium ml-2">Festivos:</div>
+            <div className="text-xs text-gray-600 dark:text-gray-500 font-medium">Festivos:</div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-red-500/20 border border-red-500/50"></div>
               <span className="text-xs text-gray-500 dark:text-gray-400">Fin semana</span>
