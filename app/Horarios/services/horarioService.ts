@@ -283,13 +283,16 @@ class HorarioService {
             console.log(`👥 ${empleados.length} empleados encontrados`);
 
             // Calcular rango de fechas
+            // Calcular rango de fechas - SIEMPRE desde el 1er día del mes actual
             const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
-            const fechaInicio = new Date(hoy);
+            const fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1); // 1er día del mes
+            fechaInicio.setHours(0, 0, 0, 0);
 
-            const fechaFin = new Date(hoy);
-            fechaFin.setMonth(fechaFin.getMonth() + meses);
-            fechaFin.setDate(fechaFin.getDate() - 1);
+            // Calcular fecha fin según meses solicitados
+            const fechaFin = new Date(hoy.getFullYear(), hoy.getMonth() + meses, 0); // Último día del mes+n
+            fechaFin.setHours(23, 59, 59, 999);
+
+            console.log(`📅 Rango de generación: ${fechaInicio.toISOString().split('T')[0]} (1er día) a ${fechaFin.toISOString().split('T')[0]} (último día)`);
 
             console.log(`📅 Rango de generación: ${fechaInicio.toISOString().split('T')[0]} a ${fechaFin.toISOString().split('T')[0]}`);
 
@@ -428,7 +431,7 @@ class HorarioService {
 
             // 5. VERIFICAR COBERTURA FINAL
             const cobertura = await this.verificarCoberturaDiaria(client, fechaInicio, fechaFin);
-            
+
             // 6. VERIFICAR QUE CADA EMPLEADO TENGA 5 DÍAS LABORALES POR SEMANA
             const cumplimiento5x2 = this.verificarCumplimiento5x2(horariosAjustados, empleados);
 
@@ -464,16 +467,16 @@ class HorarioService {
         reglas: any
     ): DiaLibreAsignado {
         const diasLibresPorEmpleado: DiaLibreAsignado = {};
-        
+
         console.log(`📊 Asignando días libres para ${empleados.length} empleados...`);
-        
+
         // Inicializar sets para cada empleado
         empleados.forEach(emp => {
             diasLibresPorEmpleado[emp.employeeid] = new Set<string>();
         });
 
         const fechaActual = new Date(fechaInicio);
-        
+
         // Asignar días libres estratégicamente
         while (fechaActual <= fechaFin) {
             const fechaStr = fechaActual.toISOString().split('T')[0];
@@ -487,24 +490,24 @@ class HorarioService {
                     const fechaLibre = new Date(fecha);
                     return this.getWeekNumber(fechaLibre) === semanaNumero;
                 }).length;
-                
+
                 // Si ya tiene 2 días libres esta semana, debe trabajar
                 if (diasLibresEstaSemana >= 2) {
                     continue;
                 }
-                
+
                 // Si es fin de semana, menor probabilidad de día libre
                 if (diaSemana === 0 || diaSemana === 6) {
                     // Fin de semana: solo 10-20% de empleados libres
                     const probabilidadLibreFinSemana = 0.15;
-                    if (Math.random() < probabilidadLibreFinSemana && 
+                    if (Math.random() < probabilidadLibreFinSemana &&
                         diasLibresEstaSemana < 1) { // Máximo 1 día libre en fin de semana
                         diasLibresEmpleado.add(fechaStr);
                     }
                 } else {
                     // Días de semana: 20-30% de empleados libres
                     const probabilidadLibre = 0.25;
-                    if (Math.random() < probabilidadLibre && 
+                    if (Math.random() < probabilidadLibre &&
                         diasLibresEstaSemana < 2) {
                         diasLibresEmpleado.add(fechaStr);
                     }
@@ -519,9 +522,9 @@ class HorarioService {
         empleados.forEach(emp => {
             totalDiasLibres += diasLibresPorEmpleado[emp.employeeid].size;
         });
-        
-        console.log(`📊 Días libres asignados: ${totalDiasLibres} (promedio ${(totalDiasLibres/empleados.length).toFixed(2)} por empleado)`);
-        
+
+        console.log(`📊 Días libres asignados: ${totalDiasLibres} (promedio ${(totalDiasLibres / empleados.length).toFixed(2)} por empleado)`);
+
         return diasLibresPorEmpleado;
     }
 
@@ -590,7 +593,7 @@ class HorarioService {
                         }
 
                         // Verificar si es día reducido (viernes para cumplir 44h semanales)
-                        const esDiaReducido = diaSemana === 5 && 
+                        const esDiaReducido = diaSemana === 5 &&
                             this.debeAplicarDiaReducido(empleado, empleados, fechaActual, reglas);
 
                         horarios.push({
@@ -606,7 +609,7 @@ class HorarioService {
 
                     } catch (error: any) {
                         console.error(`❌ Error aplicando reglas especiales para ${empleado.employeeid} - ${fechaStr}:`, error.message);
-                        
+
                         // Usar horario base como fallback
                         horarios.push({
                             employeeid: empleado.employeeid,
@@ -637,7 +640,7 @@ class HorarioService {
         reglas: any
     ): HorarioGenerado[] {
         const horariosPorFecha = new Map<string, HorarioGenerado[]>();
-        
+
         // Agrupar horarios por fecha
         horarios.forEach(h => {
             if (!horariosPorFecha.has(h.fecha)) {
@@ -656,25 +659,25 @@ class HorarioService {
             const fechaStr = fechaActual.toISOString().split('T')[0];
             const diaSemana = fechaActual.getDay();
             const horariosDelDia = horariosPorFecha.get(fechaStr) || [];
-            
+
             // Contar empleados trabajando este día
             const empleadosTrabajando = horariosDelDia.filter(h => !h.es_dia_libre).length;
-            
+
             if (empleadosTrabajando < minEmpleadosPorDia) {
                 console.log(`⚠️ Ajustando cobertura para ${fechaStr}: ${empleadosTrabajando}/${minEmpleadosPorDia} empleados`);
-                
+
                 // Encontrar empleados que están libres este día
                 const empleadosLibresEsteDia = horariosDelDia.filter(h => h.es_dia_libre);
-                
+
                 // Seleccionar algunos para cambiar a trabajando
                 const cantidadNecesaria = minEmpleadosPorDia - empleadosTrabajando;
                 const empleadosACambiar = empleadosLibresEsteDia
                     .slice(0, Math.min(cantidadNecesaria, empleadosLibresEsteDia.length));
-                
+
                 // Cambiar estado de libre a trabajando
                 empleadosACambiar.forEach(horario => {
                     horario.es_dia_libre = false;
-                    
+
                     // Obtener horario base
                     const empleado = empleados.find(e => e.employeeid === horario.employeeid);
                     if (empleado) {
@@ -685,7 +688,7 @@ class HorarioService {
                         );
                         horario.hora_entrada = horarioBase.horaEntrada;
                         horario.tipo_jornada = horarioBase.tipoJornada;
-                        
+
                         // Remover de días libres asignados
                         diasLibresPorEmpleado[horario.employeeid]?.delete(fechaStr);
                     }
@@ -722,27 +725,27 @@ class HorarioService {
         empleados: any[]
     ) {
         const semanaOriginal = this.getWeekNumber(fechaCambiada);
-        
+
         // Buscar un día en la misma semana donde el empleado trabaja
         for (let i = 0; i < 7; i++) {
             const fechaCompensacion = new Date(fechaCambiada);
             fechaCompensacion.setDate(fechaCompensacion.getDate() - 3 + i); // Buscar alrededor
-            
+
             if (fechaCompensacion < fechaInicio || fechaCompensacion > fechaFin) {
                 continue;
             }
-            
+
             const fechaStr = fechaCompensacion.toISOString().split('T')[0];
             const semanaCompensacion = this.getWeekNumber(fechaCompensacion);
-            
+
             if (semanaCompensacion !== semanaOriginal) {
                 continue;
             }
-            
+
             // Verificar si el empleado trabaja ese día
             const horariosDia = horariosPorFecha.get(fechaStr) || [];
             const horarioEmpleado = horariosDia.find(h => h.employeeid === employeeid);
-            
+
             if (horarioEmpleado && !horarioEmpleado.es_dia_libre) {
                 // Cambiar a día libre
                 horarioEmpleado.es_dia_libre = true;
@@ -751,18 +754,18 @@ class HorarioService {
                 return true;
             }
         }
-        
+
         return false;
     }
 
     private debeAplicarDiaReducido(empleado: any, empleadosList: any[], fecha: Date, reglas: any): boolean {
         // Solo aplicar día reducido los viernes
         if (fecha.getDay() !== 5) return false;
-        
+
         // Encontrar el índice del empleado en la lista
         const usuarioIndex = empleadosList.findIndex(emp => emp.employeeid === empleado.employeeid);
         if (usuarioIndex === -1) return false;
-        
+
         const semanaNumero = this.getWeekNumber(fecha);
         return semanaNumero % 2 === (usuarioIndex % 2);
     }
@@ -770,96 +773,152 @@ class HorarioService {
     private obtenerHorarioBase(
         pais: string,
         diaSemana: number,
-        reglas: any
+        reglas: any,
+        esFestivo: boolean = false  // Nuevo parámetro
     ): { horaEntrada: string; tipoJornada: TipoJornada } {
-        // Asegurarse de que reglas tenga los arrays necesarios
-        const horariosChileLV = reglas?.horariosChileLV || [];
-        const horariosChileFS = reglas?.horariosChileFS || [];
-        const horariosColombiaLV = reglas?.horariosColombiaLV || [];
-        const horariosColombiaFS = reglas?.horariosColombiaFS || [];
 
-        const esFinSemana = diaSemana === 0 || diaSemana === 6;
+        // Considerar festivos como fin de semana
+        const esFinDeSemanaOFestivo = diaSemana === 0 || diaSemana === 6 || esFestivo;
+
+        // 1. Determinar el tipo de jornada basado en porcentajes de la BD
+        let tipoJornada: TipoJornada = 'normal';
+        const random = Math.random();
+
+        if (random < reglas.porcentajeApertura) {
+            tipoJornada = 'apertura';
+        } else if (random > (1 - reglas.porcentajeCierre)) {
+            tipoJornada = 'cierre';
+        }
+
+        // 2. Obtener horarios de la BD para este país y tipo de día
         let horariosDisponibles: any[] = [];
 
         if (pais === 'chile') {
-            horariosDisponibles = esFinSemana ? 
-                horariosChileFS : 
-                horariosChileLV;
+            horariosDisponibles = esFinDeSemanaOFestivo 
+                ? reglas.horariosChileFS
+                : reglas.horariosChileLV;
         } else if (pais === 'colombia') {
-            horariosDisponibles = esFinSemana ? 
-                horariosColombiaFS : 
-                horariosColombiaLV;
+            horariosDisponibles = esFinDeSemanaOFestivo 
+                ? reglas.horariosColombiaFS
+                : reglas.horariosColombiaLV;
         } else {
             // País no reconocido, usar Chile por defecto
-            console.warn(`⚠️ País no reconocido: ${pais}, usando horarios de Chile`);
-            horariosDisponibles = esFinSemana ? horariosChileFS : horariosChileLV;
+            horariosDisponibles = esFinDeSemanaOFestivo 
+                ? reglas.horariosChileFS
+                : reglas.horariosChileLV;
         }
 
-        // Si no hay horarios configurados, usar valores por defecto
+        // 3. Si no hay horarios configurados, usar distribución calculada
         if (!horariosDisponibles || horariosDisponibles.length === 0) {
-            // Valores por defecto según el día
-            if (esFinSemana) {
-                return { horaEntrada: '09:00', tipoJornada: 'normal' as TipoJornada };
-            } else {
-                return { horaEntrada: '08:00', tipoJornada: 'normal' as TipoJornada };
+            console.log(`ℹ️ Usando distribución calculada para ${pais}`);
+
+            // Usar configuración de distribución calculada automáticamente
+            const config = reglas.configDistribucion;
+
+            if (tipoJornada === 'apertura') {
+                // Apertura según país
+                if (pais === 'chile') {
+                    const horaMin = parseInt(config.apertura_chile_min.split(':')[0]);
+                    const horaMax = parseInt(config.apertura_chile_max.split(':')[0]);
+                    const hora = horaMin + Math.floor(Math.random() * (horaMax - horaMin + 1));
+                    return {
+                        horaEntrada: `${hora.toString().padStart(2, '0')}:00`,
+                        tipoJornada: 'apertura'
+                    };
+                } else if (pais === 'colombia') {
+                    const horaMin = parseInt(config.apertura_colombia_min.split(':')[0]);
+                    const horaMax = parseInt(config.apertura_colombia_max.split(':')[0]);
+                    const hora = horaMin + Math.floor(Math.random() * (horaMax - horaMin + 1));
+                    return {
+                        horaEntrada: `${hora.toString().padStart(2, '0')}:00`,
+                        tipoJornada: 'apertura'
+                    };
+                }
+            } else if (tipoJornada === 'cierre') {
+                // Cierre según país
+                if (pais === 'chile') {
+                    return {
+                        horaEntrada: config.cierre_chile,
+                        tipoJornada: 'cierre'
+                    };
+                } else if (pais === 'colombia') {
+                    return {
+                        horaEntrada: config.cierre_colombia,
+                        tipoJornada: 'cierre'
+                    };
+                }
+            }
+
+            // Normal: usar rango completo según país
+            if (pais === 'chile') {
+                const horaMin = parseInt(config.apertura_chile_min.split(':')[0]);
+                const hora = horaMin + Math.floor(Math.random() * 5); // 5 opciones
+                return {
+                    horaEntrada: `${Math.min(hora, 12).toString().padStart(2, '0')}:00`,
+                    tipoJornada: 'normal'
+                };
+            } else if (pais === 'colombia') {
+                const horaMin = parseInt(config.apertura_colombia_min.split(':')[0]);
+                const hora = horaMin + Math.floor(Math.random() * 5); // 5 opciones
+                return {
+                    horaEntrada: `${Math.min(hora, 10).toString().padStart(2, '0')}:00`,
+                    tipoJornada: 'normal'
+                };
             }
         }
 
-        // Filtrar horarios válidos
-        const horariosValidos = horariosDisponibles.filter((h: any) => 
-            h && h.entrada && typeof h.entrada === 'string'
-        );
+        // 4. Si HAY horarios en BD, filtrar por tipo de jornada
+        let horariosFiltrados = horariosDisponibles;
 
-        if (horariosValidos.length === 0) {
-            return { horaEntrada: '08:00', tipoJornada: 'normal' as TipoJornada };
+        if (tipoJornada === 'apertura') {
+            // Buscar horarios marcados como apertura
+            horariosFiltrados = horariosDisponibles.filter((h: any) => h.tipo === 'apertura');
+            if (horariosFiltrados.length === 0) {
+                // Si no hay aperturas, usar normales
+                horariosFiltrados = horariosDisponibles.filter((h: any) => h.tipo === 'normal');
+            }
+        } else if (tipoJornada === 'cierre') {
+            // Buscar horarios marcados como cierre
+            horariosFiltrados = horariosDisponibles.filter((h: any) => h.tipo === 'cierre');
+            if (horariosFiltrados.length === 0) {
+                // Si no hay cierres, usar normales
+                horariosFiltrados = horariosDisponibles.filter((h: any) => h.tipo === 'normal');
+            }
+        } else {
+            // Para normales, usar horarios normales
+            horariosFiltrados = horariosDisponibles.filter((h: any) => h.tipo === 'normal');
         }
 
-        // Seleccionar horario aleatorio
-        const random = Math.random();
-        let tipoJornada: TipoJornada = 'normal';
-
-        // Aplicar distribución de tipos de jornada
-        if (random < (reglas?.porcentajeApertura || 0.2)) {
-            const apertura = horariosValidos.find((h: any) => h.tipo === 'apertura');
-            if (apertura) {
-                return { horaEntrada: apertura.entrada, tipoJornada: 'apertura' as TipoJornada };
-            }
-        } else if (random > (1 - (reglas?.porcentajeCierre || 0.2))) {
-            const cierre = horariosValidos.find((h: any) => h.tipo === 'cierre');
-            if (cierre) {
-                return { horaEntrada: cierre.entrada, tipoJornada: 'cierre' as TipoJornada };
-            }
+        // 5. Si no hay horarios del tipo específico, usar todos disponibles
+        if (!horariosFiltrados || horariosFiltrados.length === 0) {
+            horariosFiltrados = horariosDisponibles;
         }
 
-        // Horario normal
-        const normales = horariosValidos.filter((h: any) => !h.tipo || h.tipo === 'normal');
-        
-        if (normales.length === 0) {
-            // Si no hay normales, usar el primero disponible
-            const horario = horariosValidos[0];
+        // 6. Seleccionar un horario aleatorio
+        if (horariosFiltrados.length === 0) {
+            // Fallback final
             return {
-                horaEntrada: horario.entrada,
-                tipoJornada: 'normal' as TipoJornada
+                horaEntrada: pais === 'colombia' ? '06:00' : '08:00',
+                tipoJornada: 'normal'
             };
         }
 
-        const index = Math.floor(Math.random() * normales.length);
-        const horario = normales[index];
+        const index = Math.floor(Math.random() * horariosFiltrados.length);
+        const horarioSeleccionado = horariosFiltrados[index];
 
-        // Decidir tipo de jornada especial (entrada tardía o salida temprana) - solo ocasional
+        // 7. Ocasionalmente aplicar entrada tardía o salida temprana (5% cada una)
         const tipoRandom = Math.random();
-        if (tipoRandom < 0.05) { // 5% de probabilidad para entrada tardía
+        if (tipoRandom < 0.05) {
             tipoJornada = 'entrada_tardia';
-        } else if (tipoRandom < 0.1) { // 5% de probabilidad para salida temprana
+        } else if (tipoRandom < 0.1) {
             tipoJornada = 'salida_temprana';
         }
 
         return {
-            horaEntrada: horario.entrada,
+            horaEntrada: horarioSeleccionado.entrada,
             tipoJornada
         };
     }
-
     private async verificarCoberturaDiaria(
         client: any,
         fechaInicio: Date,
@@ -909,14 +968,14 @@ class HorarioService {
             const diasPorSemana: number[] = [];
 
             let cumple = true;
-            
+
             for (const semana of semanas) {
                 const diasLaboralesEstaSemana = horariosEmpleado
                     .filter(h => h.semana_numero === semana && !h.es_dia_libre)
                     .length;
-                
+
                 diasPorSemana.push(diasLaboralesEstaSemana);
-                
+
                 // Debe tener entre 4 y 6 días laborales por semana (flexible)
                 if (diasLaboralesEstaSemana < 4 || diasLaboralesEstaSemana > 6) {
                     cumple = false;
