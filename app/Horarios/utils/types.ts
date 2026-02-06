@@ -1,5 +1,5 @@
 // Tipos básicos
-export type TipoJornada = "normal" | "entrada_tardia" | "salida_temprana";
+export type TipoJornada = "normal" | "entrada_tardia" | "salida_temprana" | "apertura" | "cierre";
 export type ModoSeleccion = "rango" | "disperso";
 export type VistaFecha = "mes" | "semana" | "anual";
 
@@ -7,6 +7,7 @@ export type VistaFecha = "mes" | "semana" | "anual";
 export interface Usuario {
   employeeid: string;
   nombre: string;
+  pais?: 'chile' | 'colombia'; // Agregar país
 }
 
 export interface HorarioCompleto {
@@ -18,6 +19,7 @@ export interface HorarioCompleto {
   colacion: string | null;
   break_2: string | null;
   tipo_jornada: TipoJornada;
+  horas_trabajadas?: number; // Agregar este campo
 }
 
 export interface FechaDia {

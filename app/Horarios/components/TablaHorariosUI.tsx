@@ -1,8 +1,8 @@
-import React from 'react';
+// app/Horarios/components/TablaHorariosUI.tsx
+import React, { useState } from 'react';
 import { 
   VistaFecha, 
-  ModoSeleccion, 
-  TipoJornada,
+  ModoSeleccion,
   ConfigFechas 
 } from '../utils/types';
 import { 
@@ -19,7 +19,16 @@ interface TablaHorariosUIProps {
   añosDisponibles: number[];
   todasCeldasSeleccionadas: boolean;
   HORAS_OPCIONES: string[];
-  TIPOS_JORNADA: Array<{ value: TipoJornada; label: string; color: string; desc: string }>;
+  cambiosPendientes: number;
+  isLoading: boolean;
+  mensaje: { tipo: string; texto: string } | null;
+  festivos: Array<{
+    fecha: string;
+    nombre: string;
+    pais: 'chile' | 'colombia' | 'ambos';
+    nacional?: boolean;
+    observaciones?: string;
+  }>;
   
   onCambiarVista: (vista: VistaFecha) => void;
   onCambiarAño: (año: number) => void;
@@ -32,7 +41,6 @@ interface TablaHorariosUIProps {
   onToggleSeleccionTodo: () => void;
   onLimpiarSeleccion: () => void;
   onAplicarHoraGlobal: (hora: string) => void;
-  onAplicarTipoJornadaGlobal: (tipo: TipoJornada) => void;
 }
 
 const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
@@ -44,7 +52,10 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
   añosDisponibles,
   todasCeldasSeleccionadas,
   HORAS_OPCIONES,
-  TIPOS_JORNADA,
+  cambiosPendientes,
+  isLoading,
+  mensaje,
+  festivos,
   
   onCambiarVista,
   onCambiarAño,
@@ -56,14 +67,17 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
   onToggleModoSeleccion,
   onToggleSeleccionTodo,
   onLimpiarSeleccion,
-  onAplicarHoraGlobal,
-  onAplicarTipoJornadaGlobal
+  onAplicarHoraGlobal
 }) => {
   const { vista, año, mes } = configFechas;
+  const [mostrarGenerador5x2, setMostrarGenerador5x2] = useState(false);
+  const [fechaInicio5x2, setFechaInicio5x2] = useState('2025-12-29');
+  const [fechaFin5x2, setFechaFin5x2] = useState('2026-02-01');
+  const [mostrarConfig5x2, setMostrarConfig5x2] = useState(false);
 
   const renderSelectorVista = () => (
     <div className="flex gap-2">
-      {(["mes", "semana", "anual"] as VistaFecha[]).map(v => (
+      {(["mes", "semana"] as VistaFecha[]).map(v => (
         <button
           key={v}
           onClick={() => onCambiarVista(v)}
@@ -81,53 +95,11 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
   );
 
   const renderNavegacionFechas = () => {
-    if (vista === "anual") {
-      return (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onCambiarAñoNavigation("anterior")}
-            disabled={!añosDisponibles.includes(año - 1)}
-            className={`p-2 rounded-lg transition-colors ${
-              añosDisponibles.includes(año - 1)
-                ? "text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                : "text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 cursor-not-allowed"
-            }`}
-            title="Año anterior"
-          >
-            ◀
-          </button>
-          <select
-            value={año}
-            onChange={(e) => onCambiarAño(parseInt(e.target.value))}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            {añosDisponibles.map(a => (
-              <option key={a} value={a}>
-                {a} {a === año ? "(Actual)" : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => onCambiarAñoNavigation("siguiente")}
-            disabled={!añosDisponibles.includes(año + 1)}
-            className={`p-2 rounded-lg transition-colors ${
-              añosDisponibles.includes(año + 1)
-                ? "text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                : "text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 cursor-not-allowed"
-            }`}
-            title="Año siguiente"
-          >
-            ▶
-          </button>
-        </div>
-      );
-    }
-
     if (vista === "mes") {
       return (
         <div className="flex items-center gap-2">
-          <button 
-            onClick={() => onCambiarMesNavigation("anterior")} 
+          <button
+            onClick={() => onCambiarMesNavigation("anterior")}
             className="p-2 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" 
             title="Mes anterior"
           >
@@ -139,7 +111,7 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
               onChange={(e) => onCambiarAño(parseInt(e.target.value))} 
               className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
-              {añosDisponibles.map(a => <option key={a} value={a}>{a} {a === año ? "(Actual)" : ""}</option>)}
+              {añosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
             <select 
               value={mes} 
@@ -232,9 +204,91 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
     </div>
   );
 
+  const renderModalGenerador5x2 = () => {
+    if (!mostrarGenerador5x2) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100">
+                🗓️ Generador de Malla 5x2
+              </h3>
+              <button
+                onClick={() => setMostrarGenerador5x2(false)}
+                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Fecha Inicio *
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaInicio5x2}
+                    onChange={(e) => setFechaInicio5x2(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Fecha Fin *
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaFin5x2}
+                    onChange={(e) => setFechaFin5x2(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMostrarConfig5x2(!mostrarConfig5x2)}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"
+              >
+                {mostrarConfig5x2 ? '▲' : '▼'} Ver reglas de configuración
+              </button>
+
+              {mostrarConfig5x2 && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
+                  <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2">📋 Reglas que se aplicarán:</h4>
+                  <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
+                    <li>• Turno 5x2 (5 días trabajo / 2 libres)</li>
+                    <li>• Lunes obligatorios para todos</li>
+                    <li>• Máximo 6 días consecutivos trabajados</li>
+                    <li>• 20% apertura / 20% cierre diario</li>
+                    <li>• 1 fin de semana libre por mes por empleado</li>
+                    <li>• 2 domingos libres por mes por empleado</li>
+                    <li>• 16-20 teleoperadores los domingos</li>
+                    <li>• Ajuste de 44 horas semanales</li>
+                    <li>• 1° enero 2026 tratado como domingo</li>
+                  </ul>
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Las reglas se obtienen automáticamente de la tabla <code>configuracion_horarios</code>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
-      {/* Panel de navegación - Estilo de card del primer diseño */}
+      {/* Panel de navegación */}
       <div className="mb-6 p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -258,7 +312,7 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
         </div>
       </div>
 
-      {/* Panel de selección - Estilo de card del primer diseño */}
+      {/* Panel de selección */}
       <div className="mb-6 p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -303,7 +357,6 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {/* Selector de hora - Estilo del primer diseño */}
                   <select 
                     onChange={(e) => onAplicarHoraGlobal(e.target.value)} 
                     className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-w-[160px]" 
@@ -315,26 +368,15 @@ const TablaHorariosUI: React.FC<TablaHorariosUIProps> = ({
                       <option key={hora} value={hora}>{hora}</option>
                     ))}
                   </select>
-                  
-                  {/* Selector de tipo de jornada - Estilo del primer diseño */}
-                  <select 
-                    onChange={(e) => onAplicarTipoJornadaGlobal(e.target.value as TipoJornada)} 
-                    className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-w-[180px]" 
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Tipo de jornada...</option>
-                    {TIPOS_JORNADA.map(tipo => (
-                      <option key={tipo.value} value={tipo.value}>
-                        {tipo.label} ({tipo.desc})
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Modal del generador 5x2 */}
+      {renderModalGenerador5x2()}
     </>
   );
 };

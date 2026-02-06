@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import TablaHorariosSimplificada from "./components/Form";
 import SimpleMusicPlayer from './components/MusicPlayer';
 
@@ -19,6 +20,9 @@ const myTracks = [
         url: "/music/El Cóndor Herido.mp3"
     }
 ];
+=======
+import TablaHorariosSimplificada from "./components/HorariosMain";
+>>>>>>> 2fe33b408bb7e3a8312173d6821ce6c2b67c25ca
 
 export default function HorariosPage() {
     return (
