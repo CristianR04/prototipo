@@ -148,6 +148,8 @@ const TablaHorariosBody: React.FC<TablaHorariosBodyProps> = ({
               ))}
             </select>
           </div>
+
+
           
           {/* Información de horas calculadas (tooltip) */}
           {horaEntradaActual !== "Libre" && horario && (

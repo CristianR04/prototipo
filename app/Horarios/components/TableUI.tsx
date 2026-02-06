@@ -12,7 +12,7 @@ import {
 
 interface TablaHorariosUIProps {
   configFechas: ConfigFechas;
-  modoSeleccion: ModoSeleccion | null;
+  modoSeleccion: ModoSeleccion| null;
   celdasSeleccionadas: Array<{ employeeid: string; fecha: string }>;
   textoRangoFechas: string;
   textoSemana: string;
