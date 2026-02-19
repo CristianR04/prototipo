@@ -38,12 +38,12 @@ const calcularHorasConJornada = (
 
     // Si se proporciona hora de salida, calcular duración
     let duracion = 10; // Por defecto 10 horas
-    
+
     if (horaSalida && horaSalida !== "Libre") {
       const [horasS, minutosS] = horaSalida.split(':').map(Number);
       const salidaDate = new Date();
       salidaDate.setHours(horasS, minutosS, 0, 0);
-      
+
       const diffMs = salidaDate.getTime() - entradaDate.getTime();
       duracion = diffMs / (1000 * 60 * 60); // Convertir a horas
     }
@@ -80,26 +80,26 @@ const calcularHorasConJornada = (
 // POST: Generar horarios inteligentes
 export async function POST(request: NextRequest) {
   const client = await pool.connect();
-  
+
   try {
     const body = await request.json();
-    const { 
-      fecha_inicio = '2025-12-29', 
+    const {
+      fecha_inicio = '2025-12-29',
       fecha_fin = '2026-02-01',
       vista_previa = false // Nuevo parámetro para solo previsualizar
     } = body;
 
     console.log(`🚀 Iniciando generación inteligente de horarios...`);
     console.log(`📅 Rango: ${fecha_inicio} - ${fecha_fin}`);
-    
+
     // Crear generador
     const generador = new GeneradorHorariosInteligente(fecha_inicio, fecha_fin);
-    
+
     // Generar asignaciones
     const asignaciones = await generador.generarHorarios();
-    
+
     console.log(`✅ ${asignaciones.length} asignaciones generadas`);
-    
+
     // Si es vista previa, retornar solo una muestra
     if (vista_previa) {
       // Agrupar por teleoperador para estadísticas
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
         }
         porTeleoperador.get(a.employeeid)!.push(a);
       });
-      
+
       const estadisticas = {
         totalAsignaciones: asignaciones.length,
         totalTeleoperadores: porTeleoperador.size,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
         diasLibres: asignaciones.filter(a => a.hora_entrada === 'Libre').length,
         diasReducidos: asignaciones.filter(a => a.es_reducido).length
       };
-      
+
       return NextResponse.json({
         success: true,
         message: 'Vista previa generada',
@@ -134,19 +134,19 @@ export async function POST(request: NextRequest) {
 
     // Guardar en base de datos
     await client.query('BEGIN');
-    
+
     // 1. Eliminar horarios existentes en el rango
     const deleteResult = await client.query(
       'DELETE FROM horarios WHERE fecha::date >= $1::date AND fecha::date <= $2::date RETURNING id',
       [fecha_inicio, fecha_fin]
     );
-    
+
     console.log(`🗑️ Eliminados ${deleteResult.rowCount} horarios existentes`);
-    
+
     // 2. Insertar nuevos horarios
     let insertados = 0;
     let errores = 0;
-    
+
     for (const asignacion of asignaciones) {
       try {
         // Obtener campana_id
@@ -154,30 +154,31 @@ export async function POST(request: NextRequest) {
           "SELECT campana_id FROM usuarios WHERE employeeid = $1",
           [asignacion.employeeid]
         );
-        
+
         if (usuarioRes.rows.length === 0) {
           console.warn(`⚠️ Usuario no encontrado: ${asignacion.employeeid}`);
           errores++;
           continue;
         }
-        
+
         const campana_id = usuarioRes.rows[0]?.campana_id || 1;
-        
+
         // Calcular breaks si no es "Libre"
+        // En la parte donde insertas en la base de datos
         let horasCalculadas = {
-          break1: null,
-          colacion: null,
-          break2: null,
-          hora_salida: asignacion.hora_salida
+          break1: null as string | null,
+          colacion: null as string | null,
+          break2: null as string | null,
+          hora_salida: asignacion.hora_salida as string | null
         };
-        
+
         if (asignacion.hora_entrada !== 'Libre') {
           horasCalculadas = calcularHorasConJornada(
             asignacion.hora_entrada,
             asignacion.hora_salida
           );
         }
-        
+
         // Insertar
         const insertQuery = `
           INSERT INTO horarios (
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
           )
           VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9, NOW())
         `;
-        
+
         await client.query(insertQuery, [
           asignacion.employeeid,
           asignacion.fecha,
@@ -206,17 +207,17 @@ export async function POST(request: NextRequest) {
           campana_id,
           'normal' // Tipo de jornada por defecto
         ]);
-        
+
         insertados++;
-        
+
       } catch (error: any) {
         console.error(`❌ Error insertando ${asignacion.employeeid} - ${asignacion.fecha}:`, error.message);
         errores++;
       }
     }
-    
+
     await client.query('COMMIT');
-    
+
     return NextResponse.json({
       success: true,
       message: 'Horarios inteligentes generados exitosamente',
@@ -231,11 +232,11 @@ export async function POST(request: NextRequest) {
         }
       }
     });
-    
+
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error('❌ Error en generación inteligente:', error);
-    
+
     return NextResponse.json(
       {
         success: false,
